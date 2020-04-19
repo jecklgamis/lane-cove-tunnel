@@ -67,7 +67,6 @@ void event_loop(lmk_logger *logger, int tun_fd, int sock_fd) {
 
     int terminate_loop = 0;
 
-    LMK_LOG_INFO(logger, "nr_fds = %d", nr_fds);
     while (!terminate_loop) {
         int timeout_msecs = 500;
         ret_val = poll(fds, nr_fds, timeout_msecs);

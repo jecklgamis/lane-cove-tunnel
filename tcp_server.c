@@ -109,7 +109,7 @@ int main(int argc, char *argv[]) {
         usage();
     }
     init_logger(debug ? LMK_LOG_LEVEL_DEBUG : LMK_LOG_LEVEL_INFO);
-    start_server(tunnel_name, "0.0.0.0", 5050);
+    start_server(tunnel_name, "0.0.0.0", port);
 }
 
 

@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
         usage();
     }
     init_logger(debug ? LMK_LOG_LEVEL_DEBUG : LMK_LOG_LEVEL_INFO);
-    start_client(tunnel_name, remote_ip, 5050);
+    start_client(tunnel_name, remote_ip, port);
 }
 
 
