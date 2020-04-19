@@ -21,7 +21,7 @@ void start_client(char *tunnel, char *ip_addr, int port) {
     }
 
     if ((sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        LMK_LOG_ERROR(logger, "Unable to open socket");
+        LMK_LOG_ERROR(logger, "Unable to open socket : %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
@@ -31,7 +31,7 @@ void start_client(char *tunnel, char *ip_addr, int port) {
     server_addr.sin_port = htons(port);
 
     if (connect(sock_fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
-        LMK_LOG_ERROR(logger, "Unable to connect");
+        LMK_LOG_ERROR(logger, "Unable to connect : %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
     LMK_LOG_INFO(logger, "Connected to %s:%d", inet_ntoa(server_addr.sin_addr), port);
@@ -41,38 +41,45 @@ void start_client(char *tunnel, char *ip_addr, int port) {
 const char *program_name;
 
 void usage() {
-    fprintf(stderr, "Usage:\n");
-    fprintf(stderr, "%s -i <tunnel> -s <server-ip> -p <port> [-d] [-h]\n", program_name);
+    fprintf(stderr, "Usage : %s -i <tunnel-interface> -s <server-ip> -p [port] [-v] [-h]\n", program_name);
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "   -i tunnel interface\n");
+    fprintf(stderr, "   -s server ip\n");
+    fprintf(stderr, "   -p server port\n");
+    fprintf(stderr, "   -v verbose\n");
+    fprintf(stderr, "   -h print this help message\n");
+    fprintf(stderr, "Example : %s -i tun2 -s 10.9.0.2 -p 5050", program_name);
     fprintf(stderr, "\n");
     exit(1);
 }
 
 int main(int argc, char *argv[]) {
     int option;
-    int debug = 0;
-    int port = 5050;
+    int verbose = 0;
+    int server_port = 5050;
     program_name = argv[0];
     char tunnel_name[IF_NAMESIZE];
-    memset(tunnel_name, 0, IF_NAMESIZE);
-    char remote_ip[16] = "";
-    memset(remote_ip, 0, 16);
+    char server_ip[16];
 
-    while ((option = getopt(argc, argv, "i:s:p:hd")) > 0) {
+    memset(tunnel_name, 0, IF_NAMESIZE);
+    memset(server_ip, 0, 16);
+
+    while ((option = getopt(argc, argv, "i:s:p:hv")) > 0) {
         switch (option) {
             case 'h':
                 usage();
                 break;
-            case 'd':
-                debug = 1;
+            case 'v':
+                verbose = 1;
                 break;
             case 'i':
                 strncpy(tunnel_name, optarg, IFNAMSIZ - 1);
                 break;
             case 's':
-                strncpy(remote_ip, optarg, 15);
+                strncpy(server_ip, optarg, 15);
                 break;
             case 'p':
-                port = atoi(optarg);
+                server_port = atoi(optarg);
                 break;
             default:
                 fprintf(stderr, "Unknown option %c\n", option);
@@ -84,13 +91,13 @@ int main(int argc, char *argv[]) {
     argc -= optind;
 
     if (argc > 0) {
-        usage(program_name);
-    }
-    if (*tunnel_name == '\0' || *remote_ip == '\0') {
         usage();
     }
-    init_logger(debug ? LMK_LOG_LEVEL_DEBUG : LMK_LOG_LEVEL_INFO);
-    start_client(tunnel_name, remote_ip, port);
+    if (*tunnel_name == '\0' || *server_ip == '\0') {
+        usage();
+    }
+    init_logger(verbose ? LMK_LOG_LEVEL_DEBUG : LMK_LOG_LEVEL_INFO);
+    start_client(tunnel_name, server_ip, server_port);
 }
 
 

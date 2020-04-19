@@ -64,34 +64,39 @@ void start_server(char *tunnel, char *host, int port) {
 const char *program_name;
 
 void usage() {
-    fprintf(stderr, "Usage:\n");
-    fprintf(stderr, "%s -i <tunnel> -p <port> [-d] [-h]\n", program_name);
-    fprintf(stderr, "%s -h\n", program_name);
+    fprintf(stderr, "Usage : %s -i <tunnel-interface> -p [port] [-v] [-h]\n", program_name);
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "   -i tunnel interface\n");
+    fprintf(stderr, "   -p server port\n");
+    fprintf(stderr, "   -v verbose\n");
+    fprintf(stderr, "   -h print this help message\n");
+    fprintf(stderr, "Example : %s -i tun2 -p 5050", program_name);
     fprintf(stderr, "\n");
     exit(1);
 }
 
 int main(int argc, char *argv[]) {
-    int option;
-    int debug = 0;
-    int port = 5050;
     program_name = argv[0];
+    int option;
+    int verbose = 0;
+    int server_port = 5050;
     char tunnel_name[IF_NAMESIZE];
+
     memset(tunnel_name, 0, IF_NAMESIZE);
 
-    while ((option = getopt(argc, argv, "i:p:hd")) > 0) {
+    while ((option = getopt(argc, argv, "i:p:vh")) > 0) {
         switch (option) {
             case 'h':
                 usage();
                 break;
-            case 'd':
-                debug = 1;
+            case 'v':
+                verbose = 1;
                 break;
             case 'i':
                 strncpy(tunnel_name, optarg, IFNAMSIZ - 1);
                 break;
             case 'p':
-                port = atoi(optarg);
+                server_port = atoi(optarg);
                 break;
             default:
                 fprintf(stderr, "Unknown option %c\n", option);
@@ -103,13 +108,13 @@ int main(int argc, char *argv[]) {
     argc -= optind;
 
     if (argc > 0) {
-        usage(program_name);
+        usage();
     }
     if (*tunnel_name == '\0') {
         usage();
     }
-    init_logger(debug ? LMK_LOG_LEVEL_DEBUG : LMK_LOG_LEVEL_INFO);
-    start_server(tunnel_name, "0.0.0.0", port);
+    init_logger(verbose ? LMK_LOG_LEVEL_DEBUG : LMK_LOG_LEVEL_INFO);
+    start_server(tunnel_name, "0.0.0.0", server_port);
 }
 
 
