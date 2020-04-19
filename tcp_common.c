@@ -29,7 +29,7 @@ int open_tunnel(char *tunnel) {
         LMK_LOG_ERROR(logger, "Unable to connect to tunnel %s", tunnel);
         return tun_fd;
     }
-    LMK_LOG_INFO(logger, "Opened tunnel %s, fd = %d", tunnel, tun_fd);
+    LMK_LOG_INFO(logger, "Opened tunnel %s", tunnel);
     return tun_fd;
 }
 

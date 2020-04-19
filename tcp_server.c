@@ -2,9 +2,9 @@
 
 lmk_logger *logger;
 
-int init_logger() {
+int init_logger(int log_level) {
     logger = lmk_get_logger("logger");
-    lmk_set_log_level(logger, LMK_LOG_LEVEL_DEBUG);
+    lmk_set_log_level(logger, log_level);
     lmk_log_handler *console = lmk_get_console_log_handler();
     lmk_log_handler *file = lmk_get_file_log_handler("file", "tcp_server.log");
     lmk_attach_log_handler(logger, console);
@@ -61,11 +61,54 @@ void start_server(char *tunnel, char *host, int port) {
     event_loop(logger, tun_fd, client_sock_fd);
 }
 
+const char *program_name;
+
+void usage() {
+    fprintf(stderr, "Usage:\n");
+    fprintf(stderr, "%s -i <tunnel> -p <port> [-d] [-h]\n", program_name);
+    fprintf(stderr, "%s -h\n", program_name);
+    fprintf(stderr, "\n");
+    exit(1);
+}
+
 int main(int argc, char *argv[]) {
-    init_logger();
+    int option;
+    int debug = 0;
+    int port = 5050;
+    program_name = argv[0];
     char tunnel_name[IF_NAMESIZE];
     memset(tunnel_name, 0, IF_NAMESIZE);
-    strcpy(tunnel_name, "tun2");
+
+    while ((option = getopt(argc, argv, "i:p:hd")) > 0) {
+        switch (option) {
+            case 'h':
+                usage();
+                break;
+            case 'd':
+                debug = 1;
+                break;
+            case 'i':
+                strncpy(tunnel_name, optarg, IFNAMSIZ - 1);
+                break;
+            case 'p':
+                port = atoi(optarg);
+                break;
+            default:
+                fprintf(stderr, "Unknown option %c\n", option);
+                usage();
+        }
+    }
+
+    argv += optind;
+    argc -= optind;
+
+    if (argc > 0) {
+        usage(program_name);
+    }
+    if (*tunnel_name == '\0') {
+        usage();
+    }
+    init_logger(debug ? LMK_LOG_LEVEL_DEBUG : LMK_LOG_LEVEL_INFO);
     start_server(tunnel_name, "0.0.0.0", 5050);
 }
 
