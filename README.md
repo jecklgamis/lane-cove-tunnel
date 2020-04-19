@@ -9,10 +9,10 @@ A simple Linux IP tunnel using tun/tap virtual interface. This implements a simp
 ```
 make all
 ```
-This generates two binaries, `tcp_server` and `tcp_client`
+This generates two binaries, `tcp_server` and `tcp_client`.
 
 ## Running The Server
-* Create create tunnel:
+* Create the tunnel:
 ```
 ./create-server-tunnel.sh
 ```
@@ -23,7 +23,7 @@ This generates two binaries, `tcp_server` and `tcp_client`
 ```
 
 ## Running The Client
-* Create create tunnel:
+* Create the tunnel:
 ```
 ./create-client-tunnel.sh
 ```
