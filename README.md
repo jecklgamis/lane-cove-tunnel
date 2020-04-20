@@ -130,7 +130,7 @@ sudo tshark -i tun2
 ``` 
 
 ## Verifying
-You can ping a machine in the remote network (`10.10.0.0/`), establish SSH connection or `curl` a running `nginx` (if you have one!)
+You can ping a machine in the remote network (`10.10.0.0/24`), establish SSH connection or `curl` a running `nginx` (if you have one!)
 ```
 curl http://10.10.0.1
 ```
