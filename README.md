@@ -36,15 +36,18 @@ This creates a tunnel named `tun2` and assign it an ip `10.10.0.1/24`.
 
 Example output:
 ```
-$ ./create-server-tunnel.sh
+$ ./create-server-tunnel.sh 
 + TUNNEL_NAME=tun2
 + IP_ADDRESS=10.10.0.1/24
 + sudo ip tuntap del tun2 mode tun
 + sudo ip tuntap add tun2 mode tun
 + sudo ip link set tun2 up
 + sudo ip addr add 10.10.0.1/24 dev tun2
-+ echo 'Created tunnel tun2 with ip address 10.10.0.1/24'
-Created tunnel tun2 with ip address 10.10.0.1/24
++ echo 'Creating tunnel tun2 with ip address 10.10.0.1/24'
+Creating tunnel tun2 with ip address 10.10.0.1/24
++ sudo ip route add 10.9.0.0/24 via 10.10.0.1
++ echo 'Added route to 10.9.0.0/24 network via tun2'
+Added route to 10.9.0.0/24 network via tun2
 ```
 
 * Run the server:
@@ -62,6 +65,7 @@ This creates a tunnel named `tun2` and assign it an ip `10.9.0.1/24`.
 
 Example output:
 ```
+$ ./create-client-tunnel.sh 
 + TUNNEL_NAME=tun2
 + IP_ADDRESS=10.9.0.1/24
 + sudo ip tuntap del tun2 mode tun
@@ -70,6 +74,9 @@ Example output:
 + sudo ip addr add 10.9.0.1/24 dev tun2
 + echo 'Created tunnel tun2 with ip address 10.9.0.1/24'
 Created tunnel tun2 with ip address 10.9.0.1/24
++ sudo ip route add 10.10.0.0/24 via 10.9.0.1
++ echo 'Created route to 10.10.0.0/24 network via tun2'
+Created route to 10.10.0.0/24 network via tun2
 ```
 * Run the client:
 ```
@@ -88,21 +95,22 @@ $ ./run-tcp-client.sh
 ```
 
 ## Configuring The Routing Table
-In this setup, we created `10.9.0.0/24`  (local) and `10.10.0.0/24` (remote) networks. 
-We need to update the routing tables in the respective machines to route the traffic properly.
+In this setup, we created `10.9.0.0/24`  (local) and `10.10.0.0/24` (remote) networks. The `create-xxx-tunnel.sh`
+scripts also added routing table entries to the peer network.
 
-Local (`10.9.0.0/24`):
+Local machine:
 ```
-sudo ip route add 10.10.0.0/24 via 10.9.0.1
+$ ip route show
+10.10.0.0/24 via 10.9.0.1 dev tun2
 ```
-Remote (`10.10.0.0/24`):
+
+Remote:
 ```
-sudo ip route add 10.9.0.0/24 via 10.10.0.1
+$ ip route show
+10.9.0.0/24 via 10.10.0.1 dev tun2
 ````
 
-Verify routing table entries using `ip route show`
-
-That's it!, if all goes well the tunnel is ready to take some traffic!
+That's it!, if all goes well, tunnel is ready to take some traffic!
 
 ## Monitoring Tunnel Traffic
 You can use `tshark` or `tcpdump` to monitor the traffic in the virtual interface.
