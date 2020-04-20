@@ -15,7 +15,15 @@ $ sudo apt install gcc make iproutev2
 $ make all
 ```
 
-## Example Setup
+Example Setup
+```            
+10.9.0.0/24 network                                        10.10.0.0/24 network    
+...                                                        ...
+[transport: segment/packet]   <---- tunnel using TCP --->  [transport: segment/packet]   
+[network: ip packet]                                       [network: ip packet]          
+[datalink: ethernet frame ]                                [datalink: ethernet frame ]   
+[physical: bits]                                           [physical: bits]              
+```
 * Local network : 10.9.0.0/24
 * Remote network : 10.10.0.0/24
 * Local machine : 
