@@ -7,7 +7,7 @@ Warning: this is not secure and should only be used for learning purposes.
 * Linux (tested using Ubuntu 18.04 LTS), gcc, make, iproute2 
 
 ```
-$ sudo apt install gcc make iproutev2
+$ sudo apt install gcc make iproute2
 ```
 
 ## Building
