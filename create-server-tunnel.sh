@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -ex
 TUNNEL_NAME=${TUNNEL_NAME:-tun2}
-IP_ADDRESS=10.9.0.2/24
+IP_ADDRESS=10.10.0.1/24
 
 sudo ip tuntap del "${TUNNEL_NAME}" mode tun
 sudo ip tuntap add "${TUNNEL_NAME}" mode tun
