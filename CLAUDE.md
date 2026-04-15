@@ -13,12 +13,16 @@ Custom `fprintf`-based logging defined in `tcp_common.h`. Global `log_level` var
 
 ## Build
 ```
-make all          # compile tcp_server and tcp_client
-make clean        # remove binaries
-make run-server   # build server image and run container
-make run-client   # build client image and run container
-make run-shell-server  # shell into server container
-make run-shell-client  # shell into client container
+make all    # compile tcp_server and tcp_client
+make clean  # remove binaries
+```
+
+## Running With Docker
+```
+./run-tcp-server-in-docker.sh                       # build server image and run
+SERVER_IP=<ip> ./run-tcp-client-in-docker.sh        # build client image and run
+docker run --privileged -it lane-cove-tunnel-server:latest /bin/bash  # shell into server
+docker run --privileged -it lane-cove-tunnel-client:latest /bin/bash  # shell into client
 ```
 
 ## Docker

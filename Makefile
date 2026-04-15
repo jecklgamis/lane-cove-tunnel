@@ -8,11 +8,3 @@ all:
 clean:
 	rm -f ./tcp_server
 	rm -f ./tcp_client
-run-server:
-	./run-tcp-server-in-docker.sh
-run-client:
-	./run-tcp-client-in-docker.sh
-run-shell-server:
-	docker run --privileged -it lane-cove-tunnel-server:latest /bin/bash
-run-shell-client:
-	docker run --privileged -it lane-cove-tunnel-client:latest /bin/bash

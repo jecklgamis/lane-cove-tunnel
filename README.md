@@ -39,19 +39,11 @@ $ make all
 
 ### Run Server
 ```
-make run-server
-```
-Or directly:
-```
 ./run-tcp-server-in-docker.sh
 ```
 Builds the server image and starts the container automatically.
 
 ### Run Client
-```
-make run-client
-```
-Or directly:
 ```
 SERVER_IP=<server-ip> ./run-tcp-client-in-docker.sh
 ```
