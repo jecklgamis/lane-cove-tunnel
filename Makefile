@@ -12,4 +12,12 @@ server-image:
 	docker build -f Dockerfile.server -t lane-cove-tunnel-server:latest .
 client-image:
 	docker build -f Dockerfile.client -t lane-cove-tunnel-client:latest .
-image: client-image server-image
+image: server-image client-image
+run-server:
+	./run-tcp-server-in-docker.sh
+run-client:
+	./run-tcp-client-in-docker.sh
+run-shell-server:
+	docker run --privileged -it lane-cove-tunnel-server:latest /bin/bash
+run-shell-client:
+	docker run --privileged -it lane-cove-tunnel-client:latest /bin/bash
