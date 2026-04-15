@@ -34,8 +34,6 @@ void start_client(char *tunnel, char *ip_addr, int port) {
         LOG_INFO("Disconnected from %s:%d", ip_addr, port);
         close(sock_fd);
     }
-
-    close(tun_fd);
 }
 
 const char *program_name;

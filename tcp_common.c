@@ -38,7 +38,6 @@ int read_nr_bytes(int fd, char *buffer, int n) {
     while (left > 0) {
         if ((nr_read = read(fd, buffer, left)) < 0) {
             exit(-2);
-            return 0;
         } else {
             left -= nr_read;
             buffer += nr_read;
@@ -47,13 +46,12 @@ int read_nr_bytes(int fd, char *buffer, int n) {
     return n;
 }
 
-
 void event_loop(int tun_fd, int sock_fd) {
     char buffer[BUFFER_SIZE];
     int ret_val;
     ssize_t nr_read, nr_written, packet_len;
 
-    struct pollfd fds[4];
+    struct pollfd fds[2];
     int nr_fds = 0;
 
     fds[nr_fds].fd = tun_fd;
@@ -137,4 +135,3 @@ void event_loop(int tun_fd, int sock_fd) {
     }
     LOG_INFO("poll() loop terminated");
 }
-

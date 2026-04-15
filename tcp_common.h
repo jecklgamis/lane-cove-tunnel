@@ -10,10 +10,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
-#include <sys/select.h>
-#include <sys/time.h>
 #include <errno.h>
-#include <stdarg.h>
 #include <poll.h>
 
 #ifndef TCP_COMMON_H
