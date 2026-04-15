@@ -14,9 +14,11 @@ Custom `fprintf`-based logging defined in `tcp_common.h`. Global `log_level` var
 ## Build
 ```
 make all          # compile tcp_server and tcp_client
-make server-image # build Docker server image (lane-cove-tunnel-server:latest)
-make client-image # build Docker client image (lane-cove-tunnel-client:latest)
 make clean        # remove binaries
+make run-server   # build server image and run container
+make run-client   # build client image and run container
+make run-shell-server  # shell into server container
+make run-shell-client  # shell into client container
 ```
 
 ## Docker
@@ -24,8 +26,8 @@ make clean        # remove binaries
 - `Dockerfile.client` — client image (same tools, no nginx)
 - `docker-entrypoint-server.sh` — creates tunnel, starts nginx, starts tcp_server
 - `docker-entrypoint-client.sh` — creates tunnel, starts tcp_client
-- `run-tcp-server-in-docker.sh` — runs server container with `--cap-add=NET_ADMIN --device=/dev/net/tun`
-- `run-tcp-client-in-docker.sh` — runs client container, auto-detects host IP from en0/en1
+- `run-tcp-server-in-docker.sh` — builds server image and runs container with `--cap-add=NET_ADMIN --device=/dev/net/tun`
+- `run-tcp-client-in-docker.sh` — builds client image and runs container, auto-detects host IP from en0/en1
 
 ## Tunnel Interface
 - Interface name: `lanecove`

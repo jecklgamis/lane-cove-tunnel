@@ -8,11 +8,6 @@ all:
 clean:
 	rm -f ./tcp_server
 	rm -f ./tcp_client
-server-image:
-	docker build -f Dockerfile.server -t lane-cove-tunnel-server:latest .
-client-image:
-	docker build -f Dockerfile.client -t lane-cove-tunnel-client:latest .
-image: server-image client-image
 run-server:
 	./run-tcp-server-in-docker.sh
 run-client:

@@ -37,12 +37,6 @@ $ make all
 
 ## Running With Docker
 
-### Build Images
-```
-make server-image
-make client-image
-```
-
 ### Run Server
 ```
 make run-server
@@ -51,6 +45,7 @@ Or directly:
 ```
 ./run-tcp-server-in-docker.sh
 ```
+Builds the server image and starts the container automatically.
 
 ### Run Client
 ```
@@ -60,6 +55,7 @@ Or directly:
 ```
 SERVER_IP=<server-ip> ./run-tcp-client-in-docker.sh
 ```
+Builds the client image and starts the container automatically.
 The client auto-detects the host IP from `en0` (falling back to `en1`) on Mac.
 
 ## Running Natively (Linux)

@@ -4,6 +4,7 @@ SERVER_IP=${SERVER_IP:-$(ipconfig getifaddr en0)}
 echo "Using SERVER_IP = $SERVER_IP"
 SERVER_IP=${SERVER_IP:-$(ipconfig getifaddr en1)}
 SERVER_PORT=${SERVER_PORT:-5050}
+docker build -f Dockerfile.client -t lane-cove-tunnel-client:latest .
 docker run \
   --rm \
   --cap-add=NET_ADMIN \

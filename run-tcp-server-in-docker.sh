@@ -2,6 +2,7 @@
 set -ex
 TUNNEL_NAME=${TUNNEL_NAME:-lanecove}
 SERVER_PORT=${SERVER_PORT:-5050}
+docker build -f Dockerfile.server -t lane-cove-tunnel-server:latest .
 docker run \
   --rm \
   --cap-add=NET_ADMIN \
