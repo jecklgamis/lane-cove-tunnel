@@ -6,4 +6,4 @@ WORKDIR /app
 COPY . .
 
 RUN make all
-ENTRYPOINT ["./run-tcp-server.sh"]
+ENTRYPOINT ["./docker-entrypoint-server.sh"]
