@@ -14,7 +14,6 @@
 #include <sys/time.h>
 #include <errno.h>
 #include <stdarg.h>
-#include <logmoko.h>
 #include <poll.h>
 
 #ifndef TCP_COMMON_H
@@ -22,8 +21,15 @@
 
 #define BUFFER_SIZE 2048
 
+extern int log_level;
+
+#define LOG_ERROR(fmt, ...) fprintf(stderr, "[ERROR] " fmt "\n", ##__VA_ARGS__)
+#define LOG_WARN(fmt, ...)  fprintf(stderr, "[WARN]  " fmt "\n", ##__VA_ARGS__)
+#define LOG_INFO(fmt, ...)  fprintf(stderr, "[INFO]  " fmt "\n", ##__VA_ARGS__)
+#define LOG_DEBUG(fmt, ...) do { if (log_level > 0) fprintf(stderr, "[DEBUG] " fmt "\n", ##__VA_ARGS__); } while(0)
+
 int open_tunnel(char *tunnel);
 
-void event_loop(lmk_logger *logger, int tun_fd, int sock_fd);
+void event_loop(int tun_fd, int sock_fd);
 
 #endif //TCP_COMMON_H

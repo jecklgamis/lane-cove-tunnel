@@ -1,17 +1,6 @@
 #include "tcp_common.h"
 
-lmk_logger *logger;
-
-int init_logger(int log_level) {
-    logger = lmk_get_logger("logger");
-    lmk_set_log_level(logger, log_level);
-    lmk_log_handler *console = lmk_get_console_log_handler();
-    lmk_log_handler *file = lmk_get_file_log_handler("file", "tcp_server.log");
-    lmk_attach_log_handler(logger, console);
-    lmk_attach_log_handler(logger, file);
-}
-
-void start_server(char *tunnel, char *host, int port) {
+void start_server(char *tunnel, int port) {
     struct sockaddr_in server_addr, remote_addr;
     int server_sock_fd, client_sock_fd, tun_fd;
     int socket_opts = 1;
@@ -21,12 +10,12 @@ void start_server(char *tunnel, char *host, int port) {
     }
 
     if ((server_sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        LMK_LOG_ERROR(logger, "Unable to open socket : %s", strerror(errno));
+        LOG_ERROR("Unable to open socket : %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     if (setsockopt(server_sock_fd, SOL_SOCKET, SO_REUSEADDR, (char *) &socket_opts, sizeof(socket_opts)) < 0) {
-        LMK_LOG_ERROR(logger, "Unable to set socket option : %s", strerror(errno));
+        LOG_ERROR("Unable to set socket option : %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
@@ -36,29 +25,36 @@ void start_server(char *tunnel, char *host, int port) {
     server_addr.sin_port = htons(port);
 
     if (bind(server_sock_fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
-        LMK_LOG_ERROR(logger, "Unable to bind address : %s", strerror(errno));
+        LOG_ERROR("Unable to bind address : %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     int backlog = 10;
-    LMK_LOG_INFO(logger, "Started TCP server on %s:%d", host, port);
     if (listen(server_sock_fd, backlog) < 0) {
-        LMK_LOG_ERROR(logger, "Unable to listen from socket : %s", strerror(errno));
+        LOG_ERROR("Unable to listen from socket : %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
+    LOG_INFO("Started TCP server on 0.0.0.0:%d", port);
 
-    int remote_addr_len = sizeof(remote_addr);
-    memset(&remote_addr, 0, remote_addr_len);
+    while (1) {
+        socklen_t remote_addr_len = sizeof(remote_addr);
+        memset(&remote_addr, 0, remote_addr_len);
 
-    if ((client_sock_fd = accept(server_sock_fd, (struct sockaddr *) &remote_addr, &remote_addr_len)) < 0) {
-        LMK_LOG_ERROR(logger, "accept() failed : %s", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
+        if ((client_sock_fd = accept(server_sock_fd, (struct sockaddr *) &remote_addr, &remote_addr_len)) < 0) {
+            LOG_ERROR("accept() failed : %s", strerror(errno));
+            break;
+        }
 
-    LMK_LOG_INFO(logger, "Received connection from %s:%d, fd = %d", inet_ntoa(remote_addr.sin_addr),
+        LOG_INFO("Received connection from %s:%d, fd = %d", inet_ntoa(remote_addr.sin_addr),
                  ntohs(remote_addr.sin_port), client_sock_fd);
 
-    event_loop(logger, tun_fd, client_sock_fd);
+        event_loop(tun_fd, client_sock_fd);
+
+        LOG_INFO("Connection closed, waiting for next client");
+        close(client_sock_fd);
+    }
+
+    close(server_sock_fd);
 }
 
 const char *program_name;
@@ -78,7 +74,6 @@ void usage() {
 int main(int argc, char *argv[]) {
     program_name = argv[0];
     int option;
-    int verbose = 0;
     int server_port = 5050;
     char tunnel_name[IF_NAMESIZE];
 
@@ -90,7 +85,7 @@ int main(int argc, char *argv[]) {
                 usage();
                 break;
             case 'v':
-                verbose = 1;
+                log_level = 1;
                 break;
             case 'i':
                 strncpy(tunnel_name, optarg, IFNAMSIZ - 1);
@@ -113,8 +108,5 @@ int main(int argc, char *argv[]) {
     if (*tunnel_name == '\0') {
         usage();
     }
-    init_logger(verbose ? LMK_LOG_LEVEL_DEBUG : LMK_LOG_LEVEL_INFO);
-    start_server(tunnel_name, "0.0.0.0", server_port);
+    start_server(tunnel_name, server_port);
 }
-
-
