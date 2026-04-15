@@ -102,7 +102,7 @@ void event_loop(int tun_fd, int sock_fd) {
                         terminate_loop = 1;
                         break;
                     }
-                    LOG_DEBUG("TUN -> TCP: Wrote %d bytes", nr_written);
+                    LOG_DEBUG("TUN -> TCP: Wrote %zd bytes", nr_written);
                 }
             } else {
                 int close_connection = 0;
@@ -122,7 +122,7 @@ void event_loop(int tun_fd, int sock_fd) {
                             LOG_ERROR("Failed writing to tunnel %d : %s", tun_fd, strerror(errno));
                             close_connection = 1;
                         } else if (nr_written == nr_read) {
-                            LOG_DEBUG("TCP -> TUN: Wrote %d bytes", nr_written);
+                            LOG_DEBUG("TCP -> TUN: Wrote %zd bytes", nr_written);
                         }
                     }
                 }
