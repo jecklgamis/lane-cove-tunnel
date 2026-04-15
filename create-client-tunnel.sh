@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-TUNNEL_NAME=${TUNNEL_NAME:-tun2}
+TUNNEL_NAME=${TUNNEL_NAME:-lanecove}
 IP_ADDRESS=10.9.0.1/24
 
 ip tuntap del "${TUNNEL_NAME}" mode tun

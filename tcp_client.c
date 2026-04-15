@@ -48,7 +48,7 @@ void usage() {
     fprintf(stderr, "   -p server port\n");
     fprintf(stderr, "   -v verbose\n");
     fprintf(stderr, "   -h print this help message\n");
-    fprintf(stderr, "Example : %s -i tun2 -s 10.9.0.2 -p 5050", program_name);
+    fprintf(stderr, "Example : %s -i lanecove -s 10.9.0.2 -p 5050", program_name);
     fprintf(stderr, "\n");
     exit(1);
 }

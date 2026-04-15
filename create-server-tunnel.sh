@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-TUNNEL_NAME=${TUNNEL_NAME:-tun2}
+TUNNEL_NAME=${TUNNEL_NAME:-lanecove}
 CURRENT_IP=$(ip route get 1.1.1.1 | grep -oP 'src \K[\d.]+')
 LAST_OCTET=$(echo "$CURRENT_IP" | cut -d. -f4)
 IP_ADDRESS="10.10.0.${LAST_OCTET}/24"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-TUNNEL_NAME=${TUNNEL_NAME:-tun2}
+TUNNEL_NAME=${TUNNEL_NAME:-lanecove}
 SERVER_IP=${SERVER_IP:-$(ipconfig getifaddr en0)}
 echo "Using SERVER_IP = $SERVER_IP"
 SERVER_IP=${SERVER_IP:-$(ipconfig getifaddr en1)}
