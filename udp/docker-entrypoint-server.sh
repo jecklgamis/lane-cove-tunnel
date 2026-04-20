@@ -4,4 +4,3 @@ SERVER_PORT=${SERVER_PORT:-5040}
 ./create-server-tunnel.sh
 nginx
 ./udp_server -i "${TUNNEL_NAME}" -p "${SERVER_PORT}" -v
-#./udp_server -i "${TUNNEL_NAME}" -p "${SERVER_PORT}" -k some-secret -v
