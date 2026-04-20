@@ -13,7 +13,10 @@ A simple Linux TUN/TAP-based IP tunnel over TCP and UDP. Implements a basic (ins
 ### UDP (`udp/`)
 - `udp_server.c` — binds a UDP socket, learns the client address from the first datagram, forwards packets between the TUN interface and the UDP socket. Switches peer on new source address.
 - `udp_client.c` — sends a probe datagram to register with the server, then forwards packets between the TUN interface and the UDP socket. Reconnects on error.
-- `udp_common.c/h` — TUN interface allocation and logging macros (no framing — UDP datagrams preserve boundaries).
+- `udp_common.c/h` — TUN interface allocation, logging macros, and AES-256-GCM encrypt/decrypt helpers (no framing — UDP datagrams preserve boundaries).
+
+#### UDP Encryption
+Both `udp_server` and `udp_client` accept `-k <psk>`. The PSK is hashed with SHA-256 to produce a 32-byte AES-256-GCM key. Each packet on the wire is `[12-byte IV][ciphertext][16-byte GCM tag]`. Packets with an invalid tag are silently dropped. Omitting `-k` runs without encryption (with a warning).
 
 ## Logging
 Custom `fprintf`-based logging defined in `tcp_common.h` and `udp_common.h`. Global `log_level` variable (0=INFO, 1=DEBUG). Pass `-v` flag to enable debug output.

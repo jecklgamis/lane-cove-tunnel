@@ -81,9 +81,20 @@ $ ./udp/create-client-tunnel.sh   # UDP (lanecove-udp, 10.9.0.1/24)
 
 * Run the client binary directly:
 ```
-$ ./tcp/tcp_client -i lanecove     -s <server-ip> -p 5050   # TCP
-$ ./udp/udp_client -i lanecove-udp -s <server-ip> -p 5040   # UDP
+$ ./tcp/tcp_client -i lanecove     -s <server-ip> -p 5050            # TCP
+$ ./udp/udp_client -i lanecove-udp -s <server-ip> -p 5040 -k secret  # UDP (encrypted)
+$ ./udp/udp_client -i lanecove-udp -s <server-ip> -p 5040            # UDP (no encryption)
 ```
+
+## UDP Encryption
+
+The UDP tunnel supports AES-256-GCM encryption via a pre-shared key (`-k`).
+The PSK is hashed with SHA-256 to produce a 32-byte key. Each datagram on the
+wire is `[12-byte IV][ciphertext][16-byte GCM tag]`. Packets that fail tag
+verification are silently dropped.
+
+Server and client must use the same `-k` value. Omitting `-k` on both sides
+runs without encryption (a warning is printed).
 
 ## Configuring The Routing Table
 In this setup, we created `10.9.0.0/24` (local) and `10.10.0.0/24` (remote) networks. The `create-xxx-tunnel.sh`
