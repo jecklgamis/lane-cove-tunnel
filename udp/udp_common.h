@@ -15,6 +15,7 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
+#include <openssl/hmac.h>
 
 #ifndef UDP_COMMON_H
 #define UDP_COMMON_H
@@ -24,6 +25,12 @@
 #define CRYPTO_IV_LEN   12
 #define CRYPTO_TAG_LEN  16
 #define CRYPTO_OVERHEAD (CRYPTO_IV_LEN + CRYPTO_TAG_LEN)
+#define HEADER_SIZE     8
+#define WIRE_OVERHEAD   (HEADER_SIZE + CRYPTO_OVERHEAD)
+#define DH_PUBKEY_LEN   32
+#define HMAC_LEN        32
+
+extern const unsigned char pkt_header[HEADER_SIZE];
 
 extern int log_level;
 
@@ -38,5 +45,12 @@ int encrypt_packet(const unsigned char *key, const unsigned char *plain, int pla
                    unsigned char *out, int *out_len);
 int decrypt_packet(const unsigned char *key, const unsigned char *in, int in_len,
                    unsigned char *out, int *out_len);
+int handshake_client(int sock_fd, struct sockaddr_in *server_addr,
+                     const unsigned char *psk_key, unsigned char *session_key);
+int handshake_server(int sock_fd, struct sockaddr_in *peer_addr,
+                     const unsigned char *psk_key, unsigned char *session_key);
+int handshake_server_respond(int sock_fd, const unsigned char *pkt, int pkt_len,
+                             struct sockaddr_in *peer_addr,
+                             const unsigned char *psk_key, unsigned char *session_key);
 
 #endif //UDP_COMMON_H

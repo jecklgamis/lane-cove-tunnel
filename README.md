@@ -1,27 +1,26 @@
 ## lane-cove-tunnel
 
-A simple Linux IP tunnel using tun/tap virtual interface over TCP or UDP. This implements a simple (insecure!) VPN network.
-Warning: this is not secure and should only be used for learning purposes.
+A simple Linux IP tunnel using a TUN virtual interface over UDP. Implements a basic VPN for learning purposes.
+Warning: not for production use.
 
 ## Requirements
-* Linux (tested using Ubuntu 18.04 LTS), gcc, make, iproute2
+* Linux (tested using Ubuntu 22.04 LTS), gcc, make, iproute2, libssl-dev
 
 ```
-$ sudo apt install gcc make iproute2
+$ sudo apt install gcc make iproute2 libssl-dev
 ```
 
 ## Building
 ```
-$ make all          # build all four binaries
-$ make -C tcp all   # build tcp_server and tcp_client only
-$ make -C udp all   # build udp_server and udp_client only
+$ make all        # build udp_server and udp_client
+$ make clean      # remove binaries
 ```
 
 ## Example Setup
 ```
 10.9.0.0/24 network                                        10.10.0.0/24 network
 ...                                                        ...
-[transport: segment/packet]   <---- tunnel using TCP --->  [transport: segment/packet]
+[transport: segment/packet]   <---- tunnel using UDP --->  [transport: segment/packet]
 [network: ip packet]                                       [network: ip packet]
 [datalink: ethernet frame ]                                [datalink: ethernet frame ]
 [physical: bits]                                           [physical: bits]
@@ -29,95 +28,85 @@ $ make -C udp all   # build udp_server and udp_client only
 * Local network : 10.9.0.0/24
 * Remote network : 10.10.0.0/24
 * Local machine :
-  * Adds `lanecove` virtual interface (`10.9.0.1/24`)
+  * Adds `lanecove-udp` virtual interface (`10.9.0.1/24`)
   * Adds route to `10.10.0.0/24` network via `10.9.0.1`
-  * Runs the client and connects to the remote server on port 5050
+  * Runs the client and connects to the remote server on port 5040
 * Remote machine :
-  * Adds `lanecove` virtual interface (`10.10.0.x/24`, derived from host IP)
+  * Adds `lanecove-udp` virtual interface (`10.10.0.x/24`, derived from host IP)
   * Adds route to `10.9.0.0/24` network via `10.10.0.x`
-  * Runs the server on port 5050
+  * Runs the server on port 5040
 
 ## Running With Docker
-
-### TCP
-
-```
-cd tcp
-./run-tcp-server-in-docker.sh                        # build server image and run
-SERVER_IP=<server-ip> ./run-tcp-client-in-docker.sh  # build client image and run
-```
-The client auto-detects the host IP from `en0` (falling back to `en1`) on Mac.
-
-### UDP
 
 ```
 cd udp
 ./run-udp-server-in-docker.sh                        # build server image and run
 SERVER_IP=<server-ip> ./run-udp-client-in-docker.sh  # build client image and run
 ```
+The client auto-detects the host IP from `en0` (falling back to `en1`) on Mac.
 
 ## Running Natively (Linux)
 
 ### Running The Server
 * Create the tunnel:
 ```
-$ ./tcp/create-server-tunnel.sh   # TCP (lanecove, port 5050)
-$ ./udp/create-server-tunnel.sh   # UDP (lanecove-udp, port 5040)
+$ ./udp/create-server-tunnel.sh   # creates lanecove-udp interface, port 5040
 ```
-Each script creates a named TUN interface with an IP derived from the host's network interface.
 
 * Run the server binary directly:
 ```
-$ ./tcp/tcp_server -i lanecove     -p 5050   # TCP
-$ ./udp/udp_server -i lanecove-udp -p 5040   # UDP
+$ ./udp/udp_server -i lanecove-udp -p 5040 -k mysecret
 ```
 
 ### Running The Client
 * Create the tunnel:
 ```
-$ ./tcp/create-client-tunnel.sh   # TCP (lanecove, 10.9.0.1/24)
-$ ./udp/create-client-tunnel.sh   # UDP (lanecove-udp, 10.9.0.1/24)
+$ ./udp/create-client-tunnel.sh   # creates lanecove-udp, 10.9.0.1/24
 ```
 
 * Run the client binary directly:
 ```
-$ ./tcp/tcp_client -i lanecove     -s <server-ip> -p 5050            # TCP
-$ ./udp/udp_client -i lanecove-udp -s <server-ip> -p 5040 -k secret  # UDP (encrypted)
-$ ./udp/udp_client -i lanecove-udp -s <server-ip> -p 5040            # UDP (no encryption)
+$ ./udp/udp_client -i lanecove-udp -s <server-ip> -p 5040 -k mysecret   # authenticated + encrypted
+$ ./udp/udp_client -i lanecove-udp -s <server-ip> -p 5040                # unauthenticated (MITM-vulnerable)
 ```
 
-## UDP Encryption
+## Security
 
-The UDP tunnel supports AES-256-GCM encryption via a pre-shared key (`-k`).
-The PSK is hashed with SHA-256 to produce a 32-byte key. Each datagram on the
-wire is `[12-byte IV][ciphertext][16-byte GCM tag]`. Packets that fail tag
-verification are silently dropped.
+The tunnel uses X25519 Diffie-Hellman for key exchange and AES-256-GCM for encryption.
 
-Server and client must use the same `-k` value. Omitting `-k` on both sides
-runs without encryption (a warning is printed).
+### Handshake
+On connect (and reconnect), client and server perform an ephemeral X25519 DH exchange:
+1. Client sends `[8-byte magic][32-byte X25519 pubkey][32-byte HMAC-SHA256(psk, pubkey)]`
+2. Server verifies the HMAC, generates its own key pair, responds in the same format
+3. Both sides derive the session key: `SHA-256(shared_secret || client_pub || server_pub)`
+
+The PSK (`-k`) authenticates the handshake to prevent MITM. Without `-k`, the exchange still
+encrypts traffic but is vulnerable to MITM attacks.
+
+### Data packets
+Each datagram on the wire is `[12-byte IV][ciphertext of (8-byte magic + payload)][16-byte GCM tag]`.
+The magic header is authenticated by the GCM tag. Packets that fail tag verification are silently dropped.
+Each reconnect produces a new session key (forward secrecy).
 
 ## Configuring The Routing Table
-In this setup, we created `10.9.0.0/24` (local) and `10.10.0.0/24` (remote) networks. The `create-xxx-tunnel.sh`
-scripts also add routing table entries to the peer network.
+The `create-xxx-tunnel.sh` scripts add routing table entries automatically.
 
 Local machine:
 ```
 $ ip route show
-10.10.0.0/24 via 10.9.0.1 dev lanecove
+10.10.0.0/24 via 10.9.0.1 dev lanecove-udp
 ```
 
 Remote machine:
 ```
 $ ip route show
-10.9.0.0/24 via 10.10.0.x dev lanecove
+10.9.0.0/24 via 10.10.0.x dev lanecove-udp
 ```
 
 ## Monitoring Tunnel Traffic
-You can use `tshark` or `tcpdump` to monitor traffic on the virtual interface.
-
 ```
 sudo apt install tshark
-sudo tshark -i lanecove
+sudo tshark -i lanecove-udp
 ```
 
 ## Verifying

@@ -1,9 +1,11 @@
 #include "udp_common.h"
 
 static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *peer,
-                           const unsigned char *key) {
+                           unsigned char *session_key, const unsigned char *psk_key) {
+    const unsigned char *key = session_key;
     unsigned char buffer[BUFFER_SIZE];
-    unsigned char crypto_buf[BUFFER_SIZE + CRYPTO_OVERHEAD];
+    unsigned char plain_buf[HEADER_SIZE + BUFFER_SIZE];
+    unsigned char wire_buf[BUFFER_SIZE + WIRE_OVERHEAD];
     ssize_t nr_read, nr_written;
     struct sockaddr_in src_addr;
     socklen_t src_addr_len;
@@ -49,19 +51,23 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *peer,
                     terminate_loop = 1;
                     break;
                 }
-                const void *send_buf = buffer;
-                ssize_t send_len = nr_read;
+                ssize_t send_len;
                 if (key) {
                     int enc_len;
-                    if (encrypt_packet(key, buffer, (int) nr_read, crypto_buf, &enc_len) < 0) {
+                    memcpy(plain_buf, pkt_header, HEADER_SIZE);
+                    memcpy(plain_buf + HEADER_SIZE, buffer, nr_read);
+                    if (encrypt_packet(key, plain_buf, HEADER_SIZE + (int) nr_read, wire_buf, &enc_len) < 0) {
                         LOG_ERROR("encrypt_packet() failed");
                         terminate_loop = 1;
                         break;
                     }
-                    send_buf = crypto_buf;
                     send_len = enc_len;
+                } else {
+                    memcpy(wire_buf, pkt_header, HEADER_SIZE);
+                    memcpy(wire_buf + HEADER_SIZE, buffer, nr_read);
+                    send_len = HEADER_SIZE + nr_read;
                 }
-                nr_written = sendto(sock_fd, send_buf, send_len, 0,
+                nr_written = sendto(sock_fd, wire_buf, send_len, 0,
                                     (struct sockaddr *) peer, sizeof(*peer));
                 if (nr_written < 0) {
                     LOG_ERROR("sendto() failed : %s", strerror(errno));
@@ -71,33 +77,51 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *peer,
                 LOG_DEBUG("TUN -> UDP: Wrote %zd bytes", nr_written);
             } else {
                 src_addr_len = sizeof(src_addr);
-                nr_read = recvfrom(sock_fd, crypto_buf, sizeof(crypto_buf), 0,
+                nr_read = recvfrom(sock_fd, wire_buf, sizeof(wire_buf), 0,
                                    (struct sockaddr *) &src_addr, &src_addr_len);
                 if (nr_read < 0) {
                     LOG_ERROR("recvfrom() failed : %s", strerror(errno));
                     terminate_loop = 1;
                     break;
                 }
+                int hs_size = HEADER_SIZE + DH_PUBKEY_LEN + (psk_key ? HMAC_LEN : 0);
+                if (nr_read == hs_size && memcmp(wire_buf, pkt_header, HEADER_SIZE) == 0) {
+                    LOG_INFO("Re-handshake from %s:%d",
+                             inet_ntoa(src_addr.sin_addr), ntohs(src_addr.sin_port));
+                    if (handshake_server_respond(sock_fd, wire_buf, (int) nr_read,
+                                                 &src_addr, psk_key, session_key) == 0)
+                        *peer = src_addr;
+                    continue;
+                }
                 if (src_addr.sin_addr.s_addr != peer->sin_addr.s_addr ||
                     src_addr.sin_port != peer->sin_port) {
-                    LOG_INFO("New client from %s:%d, switching peer",
+                    LOG_WARN("Dropping packet from unknown peer %s:%d",
                              inet_ntoa(src_addr.sin_addr), ntohs(src_addr.sin_port));
-                    *peer = src_addr;
+                    continue;
                 }
-                const void *write_buf = crypto_buf;
-                ssize_t write_len = nr_read;
                 if (key) {
                     int plain_len;
-                    if (decrypt_packet(key, crypto_buf, (int) nr_read, buffer, &plain_len) < 0) {
+                    if (decrypt_packet(key, wire_buf, (int) nr_read, plain_buf, &plain_len) < 0) {
                         LOG_WARN("decrypt_packet() failed — dropping packet");
                         continue;
                     }
-                    write_buf = buffer;
-                    write_len = plain_len;
+                    if (plain_len < HEADER_SIZE || memcmp(plain_buf, pkt_header, HEADER_SIZE) != 0) {
+                        LOG_WARN("dropping packet: bad header");
+                        continue;
+                    }
+                    if (plain_len == HEADER_SIZE)
+                        continue;
+                    nr_written = write(tun_fd, plain_buf + HEADER_SIZE, plain_len - HEADER_SIZE);
+                } else {
+                    if (nr_read < HEADER_SIZE || memcmp(wire_buf, pkt_header, HEADER_SIZE) != 0) {
+                        LOG_WARN("dropping packet: bad header");
+                        continue;
+                    }
+                    ssize_t write_len = nr_read - HEADER_SIZE;
+                    if (write_len == 0)
+                        continue;
+                    nr_written = write(tun_fd, wire_buf + HEADER_SIZE, write_len);
                 }
-                if (write_len == 0)
-                    continue;
-                nr_written = write(tun_fd, write_buf, write_len);
                 if (nr_written < 0) {
                     LOG_ERROR("Failed writing to tunnel : %s", strerror(errno));
                     terminate_loop = 1;
@@ -137,35 +161,13 @@ void start_server(char *tunnel, int port, const unsigned char *key) {
     }
     LOG_INFO("Started UDP server on 0.0.0.0:%d", port);
 
-    unsigned char buf[BUFFER_SIZE + CRYPTO_OVERHEAD];
-    socklen_t peer_len = sizeof(peer_addr);
-    ssize_t nr_read = recvfrom(sock_fd, buf, sizeof(buf), 0,
-                               (struct sockaddr *) &peer_addr, &peer_len);
-    if (nr_read < 0) {
-        LOG_ERROR("recvfrom() failed : %s", strerror(errno));
+    unsigned char session_key[CRYPTO_KEY_LEN];
+    if (handshake_server(sock_fd, &peer_addr, key, session_key) < 0) {
+        LOG_ERROR("Handshake failed");
         exit(EXIT_FAILURE);
     }
-    LOG_INFO("First datagram from %s:%d", inet_ntoa(peer_addr.sin_addr), ntohs(peer_addr.sin_port));
 
-    if (key) {
-        unsigned char plain[BUFFER_SIZE];
-        int plain_len;
-        if (decrypt_packet(key, buf, (int) nr_read, plain, &plain_len) < 0) {
-            LOG_ERROR("Failed to decrypt initial packet — wrong PSK?");
-            exit(EXIT_FAILURE);
-        }
-        if (plain_len > 0 && write(tun_fd, plain, plain_len) < 0) {
-            LOG_ERROR("Failed writing initial packet to tunnel : %s", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-    } else {
-        if (nr_read > 0 && write(tun_fd, buf, nr_read) < 0) {
-            LOG_ERROR("Failed writing initial packet to tunnel : %s", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    udp_event_loop(tun_fd, sock_fd, &peer_addr, key);
+    udp_event_loop(tun_fd, sock_fd, &peer_addr, session_key, key);
 
     close(sock_fd);
     close(tun_fd);
@@ -232,9 +234,9 @@ int main(int argc, char *argv[]) {
     unsigned char key[CRYPTO_KEY_LEN];
     if (has_key) {
         derive_key(psk, key);
-        LOG_INFO("Encryption enabled (AES-256-GCM)");
+        LOG_INFO("PSK set — DH handshake will be authenticated");
     } else {
-        LOG_WARN("No PSK provided — running without encryption");
+        LOG_WARN("No PSK — DH handshake unauthenticated (MITM-vulnerable)");
     }
 
     start_server(tunnel_name, server_port, has_key ? key : NULL);
