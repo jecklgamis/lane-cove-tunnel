@@ -8,7 +8,7 @@ IP_ADDRESS="10.10.0.${LAST_OCTET}/24"
 echo "CURRENT_IP is $CURRENT_IP"
 echo "Overlay network IP_ADDRESS is $IP_ADDRESS"
 
-#ip tuntap del "${TUNNEL_NAME}" mode tun
+ip tuntap del "${TUNNEL_NAME}" mode tun
 ip tuntap add "${TUNNEL_NAME}" mode tun
 ip link set "${TUNNEL_NAME}" up
 ip addr add ${IP_ADDRESS} dev "${TUNNEL_NAME}"

@@ -11,10 +11,10 @@
 #include <fcntl.h>
 #include <arpa/inet.h>
 #include <errno.h>
-#include <poll.h>
+#include <sys/epoll.h>
 
-#ifndef TCP_COMMON_H
-#define TCP_COMMON_H
+#ifndef UDP_COMMON_H
+#define UDP_COMMON_H
 
 #define BUFFER_SIZE 2048
 
@@ -27,6 +27,4 @@ extern int log_level;
 
 int open_tunnel(char *tunnel);
 
-void event_loop(int tun_fd, int sock_fd);
-
-#endif //TCP_COMMON_H
+#endif //UDP_COMMON_H

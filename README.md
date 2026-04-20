@@ -1,6 +1,6 @@
 ## lane-cove-tunnel
 
-A simple Linux IP tunnel using tun/tap virtual interface. This implements a simple (insecure!) VPN network.
+A simple Linux IP tunnel using tun/tap virtual interface over TCP or UDP. This implements a simple (insecure!) VPN network.
 Warning: this is not secure and should only be used for learning purposes.
 
 ## Requirements
@@ -12,7 +12,9 @@ $ sudo apt install gcc make iproute2
 
 ## Building
 ```
-$ make all
+$ make all          # build all four binaries
+$ make -C tcp all   # build tcp_server and tcp_client only
+$ make -C udp all   # build udp_server and udp_client only
 ```
 
 ## Example Setup
@@ -29,52 +31,58 @@ $ make all
 * Local machine :
   * Adds `lanecove` virtual interface (`10.9.0.1/24`)
   * Adds route to `10.10.0.0/24` network via `10.9.0.1`
-  * Runs the TCP client and connects to remote TCP server on port 5050
+  * Runs the client and connects to the remote server on port 5050
 * Remote machine :
   * Adds `lanecove` virtual interface (`10.10.0.x/24`, derived from host IP)
   * Adds route to `10.9.0.0/24` network via `10.10.0.x`
-  * Runs the TCP server on port 5050
+  * Runs the server on port 5050
 
 ## Running With Docker
 
-### Run Server
-```
-./run-tcp-server-in-docker.sh
-```
-Builds the server image and starts the container automatically.
+### TCP
 
-### Run Client
 ```
-SERVER_IP=<server-ip> ./run-tcp-client-in-docker.sh
+cd tcp
+./run-tcp-server-in-docker.sh                        # build server image and run
+SERVER_IP=<server-ip> ./run-tcp-client-in-docker.sh  # build client image and run
 ```
-Builds the client image and starts the container automatically.
 The client auto-detects the host IP from `en0` (falling back to `en1`) on Mac.
+
+### UDP
+
+```
+cd udp
+./run-udp-server-in-docker.sh                        # build server image and run
+SERVER_IP=<server-ip> ./run-udp-client-in-docker.sh  # build client image and run
+```
 
 ## Running Natively (Linux)
 
 ### Running The Server
 * Create the tunnel:
 ```
-$ ./create-server-tunnel.sh
+$ ./tcp/create-server-tunnel.sh   # TCP (lanecove, port 5050)
+$ ./udp/create-server-tunnel.sh   # UDP (lanecove-udp, port 5040)
 ```
-This creates a tunnel named `lanecove` with an IP derived from the host's current network interface.
+Each script creates a named TUN interface with an IP derived from the host's network interface.
 
-* Run the server:
+* Run the server binary directly:
 ```
-$ ./run-tcp-server.sh
+$ ./tcp/tcp_server -i lanecove     -p 5050   # TCP
+$ ./udp/udp_server -i lanecove-udp -p 5040   # UDP
 ```
-This will start nginx and a TCP server on port 5050 bound to `0.0.0.0`.
 
 ### Running The Client
 * Create the tunnel:
 ```
-$ ./create-client-tunnel.sh
+$ ./tcp/create-client-tunnel.sh   # TCP (lanecove, 10.9.0.1/24)
+$ ./udp/create-client-tunnel.sh   # UDP (lanecove-udp, 10.9.0.1/24)
 ```
-This creates a tunnel named `lanecove` and assigns it `10.9.0.1/24`.
 
-* Run the client:
+* Run the client binary directly:
 ```
-$ SERVER_IP=<server-ip> ./run-tcp-client.sh
+$ ./tcp/tcp_client -i lanecove     -s <server-ip> -p 5050   # TCP
+$ ./udp/udp_client -i lanecove-udp -s <server-ip> -p 5040   # UDP
 ```
 
 ## Configuring The Routing Table
