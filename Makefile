@@ -1,7 +1,7 @@
 default:
 	cat ./Makefile
 all:
-	gcc -o server server.c common.c -lssl -lcrypto
+	gcc -o server server.c common.c rcunit_list.c -lssl -lcrypto
 	gcc -o client client.c common.c -lssl -lcrypto
 	chmod +x server
 	chmod +x client

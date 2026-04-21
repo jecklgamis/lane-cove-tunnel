@@ -3,10 +3,13 @@
 static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_addr,
                            const unsigned char *key) {
     unsigned char buffer[BUFFER_SIZE];
-    unsigned char plain_buf[HEADER_SIZE + BUFFER_SIZE];
+    unsigned char plain_buf[HEADER_SIZE + SEQ_SIZE + BUFFER_SIZE];
     unsigned char wire_buf[BUFFER_SIZE + WIRE_OVERHEAD];
     ssize_t nr_read, nr_written;
     int terminate_loop = 0;
+    uint64_t send_seq = 0;
+    uint64_t recv_seq_highest = 0;
+    uint64_t recv_seq_window = 0;
 
     int epoll_fd = epoll_create1(0);
     if (epoll_fd < 0) {
@@ -48,13 +51,14 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_a
                     terminate_loop = 1;
                     break;
                 }
-                memcpy(wire_buf, pkt_header, HEADER_SIZE);
                 ssize_t send_len;
                 if (key) {
                     int enc_len;
+                    uint64_t seq_be = htobe64(send_seq++);
                     memcpy(plain_buf, pkt_header, HEADER_SIZE);
-                    memcpy(plain_buf + HEADER_SIZE, buffer, nr_read);
-                    if (encrypt_packet(key, plain_buf, HEADER_SIZE + (int) nr_read, wire_buf, &enc_len) < 0) {
+                    memcpy(plain_buf + HEADER_SIZE, &seq_be, SEQ_SIZE);
+                    memcpy(plain_buf + HEADER_SIZE + SEQ_SIZE, buffer, nr_read);
+                    if (encrypt_packet(key, plain_buf, HEADER_SIZE + SEQ_SIZE + (int) nr_read, wire_buf, &enc_len) < 0) {
                         LOG_ERROR("encrypt_packet() failed");
                         terminate_loop = 1;
                         break;
@@ -86,13 +90,21 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_a
                         LOG_WARN("decrypt_packet() failed — dropping packet");
                         continue;
                     }
-                    if (plain_len < HEADER_SIZE || memcmp(plain_buf, pkt_header, HEADER_SIZE) != 0) {
+                    if (plain_len < HEADER_SIZE + SEQ_SIZE || memcmp(plain_buf, pkt_header, HEADER_SIZE) != 0) {
                         LOG_WARN("dropping packet: bad header");
                         continue;
                     }
-                    if (plain_len == HEADER_SIZE)
+                    uint64_t seq_be;
+                    memcpy(&seq_be, plain_buf + HEADER_SIZE, SEQ_SIZE);
+                    uint64_t seq = be64toh(seq_be);
+                    if (check_replay(seq, &recv_seq_highest, &recv_seq_window) < 0) {
+                        LOG_WARN("Replay detected (seq=%lu) — dropping", (unsigned long) seq);
                         continue;
-                    nr_written = write(tun_fd, plain_buf + HEADER_SIZE, plain_len - HEADER_SIZE);
+                    }
+                    int payload_len = plain_len - HEADER_SIZE - SEQ_SIZE;
+                    if (payload_len == 0)
+                        continue;
+                    nr_written = write(tun_fd, plain_buf + HEADER_SIZE + SEQ_SIZE, payload_len);
                 } else {
                     if (nr_read < HEADER_SIZE || memcmp(wire_buf, pkt_header, HEADER_SIZE) != 0) {
                         LOG_WARN("dropping packet: bad header");
@@ -116,7 +128,9 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_a
     LOG_INFO("epoll() loop terminated");
 }
 
-void start_client(char *tunnel, char *ip_addr, int port, const unsigned char *key) {
+void start_client(char *tunnel, char *ip_addr, int port, const unsigned char *psk_key,
+                  EVP_PKEY *static_key, const unsigned char *static_pub,
+                  const unsigned char *server_static_pub) {
     struct sockaddr_in server_addr;
     int sock_fd, tun_fd;
 
@@ -139,7 +153,9 @@ void start_client(char *tunnel, char *ip_addr, int port, const unsigned char *ke
         }
 
         unsigned char session_key[CRYPTO_KEY_LEN];
-        if (handshake_client(sock_fd, &server_addr, key, session_key) < 0) {
+        if (handshake_client(sock_fd, &server_addr, psk_key,
+                             static_key, static_pub, server_static_pub,
+                             session_key) < 0) {
             LOG_ERROR("Handshake failed, reconnecting");
             close(sock_fd);
             continue;
@@ -156,17 +172,18 @@ void start_client(char *tunnel, char *ip_addr, int port, const unsigned char *ke
 const char *program_name;
 
 void usage() {
-    fprintf(stderr, "Usage : %s -i <tunnel-interface> -s <server-ip> -p [port] [-k <psk>] [-v] [-h]\n",
+    fprintf(stderr, "Usage : %s -i <tunnel-interface> -s <server-ip> [-p <port>] [-k <psk>] [-K <keyfile>] [-E <server-pubkey-hex>] [-v] [-h]\n",
             program_name);
     fprintf(stderr, "Options:\n");
-    fprintf(stderr, "   -i tunnel interface\n");
-    fprintf(stderr, "   -s server ip\n");
-    fprintf(stderr, "   -p server port\n");
-    fprintf(stderr, "   -k pre-shared key for AES-256-GCM encryption\n");
-    fprintf(stderr, "   -v verbose\n");
-    fprintf(stderr, "   -h print this help message\n");
-    fprintf(stderr, "Example : %s -i lanecove-udp -s 10.9.0.2 -p 5040 -k mysecret", program_name);
-    fprintf(stderr, "\n");
+    fprintf(stderr, "   -i  tunnel interface\n");
+    fprintf(stderr, "   -s  server ip\n");
+    fprintf(stderr, "   -p  server port (default 5040)\n");
+    fprintf(stderr, "   -k  pre-shared key for handshake authentication\n");
+    fprintf(stderr, "   -K  static keypair file (default client.key)\n");
+    fprintf(stderr, "   -E  expected server public key (hex) — reject if mismatch\n");
+    fprintf(stderr, "   -v  verbose\n");
+    fprintf(stderr, "   -h  print this help message\n");
+    fprintf(stderr, "Example : %s -i lanecove-udp -s 10.10.0.1 -p 5040 -k mysecret -K client.key\n", program_name);
     exit(1);
 }
 
@@ -177,13 +194,18 @@ int main(int argc, char *argv[]) {
     char tunnel_name[IF_NAMESIZE];
     char server_ip[INET_ADDRSTRLEN];
     char psk[256];
-    int has_key = 0;
+    char keyfile[256];
+    char server_pub_hex[DH_PUBKEY_LEN * 2 + 1];
+    int has_psk = 0;
+    int has_server_pub = 0;
 
     memset(tunnel_name, 0, IF_NAMESIZE);
     memset(server_ip, 0, INET_ADDRSTRLEN);
     memset(psk, 0, sizeof(psk));
+    strncpy(keyfile, "client.key", sizeof(keyfile) - 1);
+    memset(server_pub_hex, 0, sizeof(server_pub_hex));
 
-    while ((option = getopt(argc, argv, "i:s:p:k:hv")) > 0) {
+    while ((option = getopt(argc, argv, "i:s:p:k:K:E:hv")) > 0) {
         switch (option) {
             case 'h':
                 usage();
@@ -202,7 +224,14 @@ int main(int argc, char *argv[]) {
                 break;
             case 'k':
                 strncpy(psk, optarg, sizeof(psk) - 1);
-                has_key = 1;
+                has_psk = 1;
+                break;
+            case 'K':
+                strncpy(keyfile, optarg, sizeof(keyfile) - 1);
+                break;
+            case 'E':
+                strncpy(server_pub_hex, optarg, sizeof(server_pub_hex) - 1);
+                has_server_pub = 1;
                 break;
             default:
                 fprintf(stderr, "Unknown option %c\n", option);
@@ -218,13 +247,37 @@ int main(int argc, char *argv[]) {
     if (*tunnel_name == '\0' || *server_ip == '\0')
         usage();
 
-    unsigned char key[CRYPTO_KEY_LEN];
-    if (has_key) {
-        derive_key(psk, key);
+    unsigned char psk_key[CRYPTO_KEY_LEN];
+    if (has_psk) {
+        derive_key(psk, psk_key);
         LOG_INFO("PSK set — DH handshake will be authenticated");
     } else {
         LOG_WARN("No PSK — DH handshake unauthenticated (MITM-vulnerable)");
     }
 
-    start_client(tunnel_name, server_ip, server_port, has_key ? key : NULL);
+    EVP_PKEY *static_key = NULL;
+    unsigned char static_pub[DH_PUBKEY_LEN];
+    if (load_or_generate_static_key(keyfile, &static_key, static_pub) < 0) {
+        LOG_ERROR("Failed to load/generate static keypair from %s", keyfile);
+        exit(EXIT_FAILURE);
+    }
+    char pub_hex[DH_PUBKEY_LEN * 2 + 1];
+    bytes_to_hex(static_pub, DH_PUBKEY_LEN, pub_hex);
+    LOG_INFO("Client public key: %s", pub_hex);
+
+    unsigned char server_static_pub[DH_PUBKEY_LEN];
+    if (has_server_pub) {
+        if (hex_to_bytes(server_pub_hex, server_static_pub, DH_PUBKEY_LEN) < 0) {
+            LOG_ERROR("Invalid server public key hex: %s", server_pub_hex);
+            exit(EXIT_FAILURE);
+        }
+        LOG_INFO("Expected server public key: %s", server_pub_hex);
+    } else {
+        LOG_WARN("No expected server public key — server identity not verified");
+    }
+
+    start_client(tunnel_name, server_ip, server_port,
+                 has_psk ? psk_key : NULL,
+                 static_key, static_pub,
+                 has_server_pub ? server_static_pub : NULL);
 }

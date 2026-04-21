@@ -19,7 +19,7 @@ On connect (and reconnect), client and server perform an ephemeral X25519 DH exc
 The PSK authenticates the handshake (prevents MITM). Without PSK the exchange still encrypts but is unauthenticated.
 
 #### Data Packets
-Each datagram on the wire is `[12-byte IV][ciphertext of (8-byte magic + payload)][16-byte GCM tag]`. Without encryption: `[8-byte magic][plaintext]`. Magic is `0xdeadbeefcafebabe`. Packets with a bad header or invalid GCM tag are silently dropped.
+Each datagram on the wire is `[12-byte IV][ciphertext of (8-byte magic + 8-byte seq + payload)][16-byte GCM tag]`. Magic is `0xdeadbeefcafebabe`. The sequence number is a per-session monotonically increasing 64-bit counter (big-endian) used for replay protection. Packets with a bad header, invalid GCM tag, or a replayed/too-old sequence number are silently dropped. The receiver uses a 64-bit sliding window to detect replays.
 
 ## Logging
 Custom `fprintf`-based logging defined in `common.h`. Global `log_level` variable (0=INFO, 1=DEBUG). Pass `-v` flag to enable debug output.
