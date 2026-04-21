@@ -32,8 +32,8 @@ $ make clean      # remove binaries
   * Adds route to `10.10.0.0/24` network via `10.9.0.1`
   * Runs the client and connects to the remote server on port 5040
 * Remote machine :
-  * Adds `lanecove-udp` virtual interface (`10.10.0.x/24`, derived from host IP)
-  * Adds route to `10.9.0.0/24` network via `10.10.0.x`
+  * Adds `lanecove-udp` virtual interface (`10.10.0.1/24`)
+  * Adds route to `10.9.0.0/24` network via `10.10.0.1`
   * Runs the server on port 5040
 
 ## Running With Docker
@@ -49,7 +49,7 @@ The client auto-detects the host IP from `en0` (falling back to `en1`) on Mac.
 ### Running The Server
 * Create the tunnel:
 ```
-$ ./create-server-tunnel.sh   # creates lanecove-udp interface, port 5040
+$ ./create-server-tunnel.sh   # creates lanecove-udp at 10.10.0.1/24
 ```
 
 * Run the server binary directly:
@@ -99,7 +99,7 @@ $ ip route show
 Remote machine:
 ```
 $ ip route show
-10.9.0.0/24 via 10.10.0.x dev lanecove-udp
+10.9.0.0/24 via 10.10.0.1 dev lanecove-udp
 ```
 
 ## Monitoring Tunnel Traffic
