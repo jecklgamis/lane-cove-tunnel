@@ -1,6 +1,10 @@
 default:
 	cat ./Makefile
 all:
-	$(MAKE) -C udp all
+	gcc -o server server.c common.c -lssl -lcrypto
+	gcc -o client client.c common.c -lssl -lcrypto
+	chmod +x server
+	chmod +x client
 clean:
-	$(MAKE) -C udp clean
+	rm -f ./server
+	rm -f ./client

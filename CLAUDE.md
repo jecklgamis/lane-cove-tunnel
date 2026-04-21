@@ -5,10 +5,10 @@ A simple Linux TUN/TAP-based IP tunnel over UDP. Implements a basic VPN for lear
 
 ## Architecture
 
-### UDP (`udp/`)
-- `udp_server.c` — binds a UDP socket, performs DH handshake with client, forwards packets between the TUN interface and the UDP socket. Detects re-handshake packets from reconnecting clients and re-keys automatically.
-- `udp_client.c` — performs DH handshake with the server, forwards packets between the TUN interface and the UDP socket. Reconnects and re-handshakes on error.
-- `udp_common.c/h` — TUN interface allocation, logging macros, AES-256-GCM encrypt/decrypt helpers, and X25519 DH handshake functions.
+### UDP
+- `server.c` — binds a UDP socket, performs DH handshake with client, forwards packets between the TUN interface and the UDP socket. Detects re-handshake packets from reconnecting clients and re-keys automatically.
+- `client.c` — performs DH handshake with the server, forwards packets between the TUN interface and the UDP socket. Reconnects and re-handshakes on error.
+- `common.c/h` — TUN interface allocation, logging macros, AES-256-GCM encrypt/decrypt helpers, and X25519 DH handshake functions.
 
 #### Handshake
 On connect (and reconnect), client and server perform an ephemeral X25519 DH exchange:
@@ -33,20 +33,19 @@ make -C udp all   # same, explicit
 
 ## Running With Docker
 ```
-cd udp
-./run-udp-server-in-docker.sh
-SERVER_IP=<ip> ./run-udp-client-in-docker.sh
+./run-server-in-docker.sh
+SERVER_IP=<ip> ./run-client-in-docker.sh
 docker run --privileged -it lane-cove-tunnel-udp-server:latest /bin/bash
 docker run --privileged -it lane-cove-tunnel-udp-client:latest /bin/bash
 ```
 
-## Docker (`udp/`)
+## Docker
 - `Dockerfile.server` — server image with nginx, iproute2, net-tools, ping, traceroute, htop, kmod
 - `Dockerfile.client` — client image (same tools, no nginx)
 - `docker-entrypoint-server.sh` — creates tunnel, starts nginx, starts udp_server
 - `docker-entrypoint-client.sh` — creates tunnel, starts udp_client
-- `run-udp-server-in-docker.sh` — builds server image and runs container, exposes UDP port
-- `run-udp-client-in-docker.sh` — builds client image and runs container, auto-detects host IP from en0/en1
+- `run-server-in-docker.sh` — builds server image and runs container, exposes UDP port
+- `run-client-in-docker.sh` — builds client image and runs container, auto-detects host IP from en0/en1
 
 ## Tunnel Interface
 - Interface name: `lanecove-udp`

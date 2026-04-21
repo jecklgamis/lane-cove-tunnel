@@ -12,7 +12,7 @@ $ sudo apt install gcc make iproute2 libssl-dev
 
 ## Building
 ```
-$ make all        # build udp_server and udp_client
+$ make all        # build server and client
 $ make clean      # remove binaries
 ```
 
@@ -39,9 +39,8 @@ $ make clean      # remove binaries
 ## Running With Docker
 
 ```
-cd udp
-./run-udp-server-in-docker.sh                        # build server image and run
-SERVER_IP=<server-ip> ./run-udp-client-in-docker.sh  # build client image and run
+./run-server-in-docker.sh                        # build server image and run
+SERVER_IP=<server-ip> ./run-client-in-docker.sh  # build client image and run
 ```
 The client auto-detects the host IP from `en0` (falling back to `en1`) on Mac.
 
@@ -50,24 +49,24 @@ The client auto-detects the host IP from `en0` (falling back to `en1`) on Mac.
 ### Running The Server
 * Create the tunnel:
 ```
-$ ./udp/create-server-tunnel.sh   # creates lanecove-udp interface, port 5040
+$ ./create-server-tunnel.sh   # creates lanecove-udp interface, port 5040
 ```
 
 * Run the server binary directly:
 ```
-$ ./udp/udp_server -i lanecove-udp -p 5040 -k mysecret
+$ ./server -i lanecove-udp -p 5040 -k mysecret
 ```
 
 ### Running The Client
 * Create the tunnel:
 ```
-$ ./udp/create-client-tunnel.sh   # creates lanecove-udp, 10.9.0.1/24
+$ ./create-client-tunnel.sh   # creates lanecove-udp, 10.9.0.1/24
 ```
 
 * Run the client binary directly:
 ```
-$ ./udp/udp_client -i lanecove-udp -s <server-ip> -p 5040 -k mysecret   # authenticated + encrypted
-$ ./udp/udp_client -i lanecove-udp -s <server-ip> -p 5040                # unauthenticated (MITM-vulnerable)
+$ ./client -i lanecove-udp -s <server-ip> -p 5040 -k mysecret   # authenticated + encrypted
+$ ./client -i lanecove-udp -s <server-ip> -p 5040                # unauthenticated (MITM-vulnerable)
 ```
 
 ## Security

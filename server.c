@@ -1,11 +1,14 @@
-#include "udp_common.h"
+#include "common.h"
 
-static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_addr,
-                           const unsigned char *key) {
+static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *peer,
+                           unsigned char *session_key, const unsigned char *psk_key) {
+    const unsigned char *key = session_key;
     unsigned char buffer[BUFFER_SIZE];
     unsigned char plain_buf[HEADER_SIZE + BUFFER_SIZE];
     unsigned char wire_buf[BUFFER_SIZE + WIRE_OVERHEAD];
     ssize_t nr_read, nr_written;
+    struct sockaddr_in src_addr;
+    socklen_t src_addr_len;
     int terminate_loop = 0;
 
     int epoll_fd = epoll_create1(0);
@@ -48,7 +51,6 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_a
                     terminate_loop = 1;
                     break;
                 }
-                memcpy(wire_buf, pkt_header, HEADER_SIZE);
                 ssize_t send_len;
                 if (key) {
                     int enc_len;
@@ -66,7 +68,7 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_a
                     send_len = HEADER_SIZE + nr_read;
                 }
                 nr_written = sendto(sock_fd, wire_buf, send_len, 0,
-                                    (struct sockaddr *) server_addr, sizeof(*server_addr));
+                                    (struct sockaddr *) peer, sizeof(*peer));
                 if (nr_written < 0) {
                     LOG_ERROR("sendto() failed : %s", strerror(errno));
                     terminate_loop = 1;
@@ -74,11 +76,28 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_a
                 }
                 LOG_DEBUG("TUN -> UDP: Wrote %zd bytes", nr_written);
             } else {
-                nr_read = recvfrom(sock_fd, wire_buf, sizeof(wire_buf), 0, NULL, NULL);
+                src_addr_len = sizeof(src_addr);
+                nr_read = recvfrom(sock_fd, wire_buf, sizeof(wire_buf), 0,
+                                   (struct sockaddr *) &src_addr, &src_addr_len);
                 if (nr_read < 0) {
                     LOG_ERROR("recvfrom() failed : %s", strerror(errno));
                     terminate_loop = 1;
                     break;
+                }
+                int hs_size = HEADER_SIZE + DH_PUBKEY_LEN + (psk_key ? HMAC_LEN : 0);
+                if (nr_read == hs_size && memcmp(wire_buf, pkt_header, HEADER_SIZE) == 0) {
+                    LOG_INFO("Re-handshake from %s:%d",
+                             inet_ntoa(src_addr.sin_addr), ntohs(src_addr.sin_port));
+                    if (handshake_server_respond(sock_fd, wire_buf, (int) nr_read,
+                                                 &src_addr, psk_key, session_key) == 0)
+                        *peer = src_addr;
+                    continue;
+                }
+                if (src_addr.sin_addr.s_addr != peer->sin_addr.s_addr ||
+                    src_addr.sin_port != peer->sin_port) {
+                    LOG_WARN("Dropping packet from unknown peer %s:%d",
+                             inet_ntoa(src_addr.sin_addr), ntohs(src_addr.sin_port));
+                    continue;
                 }
                 if (key) {
                     int plain_len;
@@ -116,74 +135,71 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_a
     LOG_INFO("epoll() loop terminated");
 }
 
-void start_client(char *tunnel, char *ip_addr, int port, const unsigned char *key) {
-    struct sockaddr_in server_addr;
+void start_server(char *tunnel, int port, const unsigned char *key) {
+    struct sockaddr_in server_addr, peer_addr;
     int sock_fd, tun_fd;
+    int socket_opts = 1;
 
     if ((tun_fd = open_tunnel(tunnel)) < 0) {
         exit(EXIT_FAILURE);
     }
-
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    if (inet_pton(AF_INET, ip_addr, &server_addr.sin_addr) <= 0) {
-        LOG_ERROR("Invalid server IP address : %s", ip_addr);
+    if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        LOG_ERROR("Unable to open socket : %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
-    server_addr.sin_port = htons(port);
-
-    while (1) {
-        if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-            LOG_ERROR("Unable to open socket : %s", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-
-        unsigned char session_key[CRYPTO_KEY_LEN];
-        if (handshake_client(sock_fd, &server_addr, key, session_key) < 0) {
-            LOG_ERROR("Handshake failed, reconnecting");
-            close(sock_fd);
-            continue;
-        }
-        LOG_INFO("Connected to %s:%d", ip_addr, port);
-
-        udp_event_loop(tun_fd, sock_fd, &server_addr, session_key);
-
-        LOG_INFO("Disconnected from %s:%d, reconnecting", ip_addr, port);
-        close(sock_fd);
+    if (setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &socket_opts, sizeof(socket_opts)) < 0) {
+        LOG_ERROR("Unable to set socket option : %s", strerror(errno));
+        exit(EXIT_FAILURE);
     }
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    server_addr.sin_port = htons(port);
+    if (bind(sock_fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
+        LOG_ERROR("Unable to bind address : %s", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    LOG_INFO("Started UDP server on 0.0.0.0:%d", port);
+
+    unsigned char session_key[CRYPTO_KEY_LEN];
+    if (handshake_server(sock_fd, &peer_addr, key, session_key) < 0) {
+        LOG_ERROR("Handshake failed");
+        exit(EXIT_FAILURE);
+    }
+
+    udp_event_loop(tun_fd, sock_fd, &peer_addr, session_key, key);
+
+    close(sock_fd);
+    close(tun_fd);
 }
 
 const char *program_name;
 
 void usage() {
-    fprintf(stderr, "Usage : %s -i <tunnel-interface> -s <server-ip> -p [port] [-k <psk>] [-v] [-h]\n",
-            program_name);
+    fprintf(stderr, "Usage : %s -i <tunnel-interface> -p [port] [-k <psk>] [-v] [-h]\n", program_name);
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "   -i tunnel interface\n");
-    fprintf(stderr, "   -s server ip\n");
     fprintf(stderr, "   -p server port\n");
     fprintf(stderr, "   -k pre-shared key for AES-256-GCM encryption\n");
     fprintf(stderr, "   -v verbose\n");
     fprintf(stderr, "   -h print this help message\n");
-    fprintf(stderr, "Example : %s -i lanecove-udp -s 10.9.0.2 -p 5040 -k mysecret", program_name);
+    fprintf(stderr, "Example : %s -i lanecove-udp -p 5040 -k mysecret", program_name);
     fprintf(stderr, "\n");
     exit(1);
 }
 
 int main(int argc, char *argv[]) {
+    program_name = argv[0];
     int option;
     int server_port = 5040;
-    program_name = argv[0];
     char tunnel_name[IF_NAMESIZE];
-    char server_ip[INET_ADDRSTRLEN];
     char psk[256];
     int has_key = 0;
 
     memset(tunnel_name, 0, IF_NAMESIZE);
-    memset(server_ip, 0, INET_ADDRSTRLEN);
     memset(psk, 0, sizeof(psk));
 
-    while ((option = getopt(argc, argv, "i:s:p:k:hv")) > 0) {
+    while ((option = getopt(argc, argv, "i:p:k:vh")) > 0) {
         switch (option) {
             case 'h':
                 usage();
@@ -193,9 +209,6 @@ int main(int argc, char *argv[]) {
                 break;
             case 'i':
                 strncpy(tunnel_name, optarg, IFNAMSIZ - 1);
-                break;
-            case 's':
-                strncpy(server_ip, optarg, INET_ADDRSTRLEN - 1);
                 break;
             case 'p':
                 server_port = atoi(optarg);
@@ -215,7 +228,7 @@ int main(int argc, char *argv[]) {
 
     if (argc > 0)
         usage();
-    if (*tunnel_name == '\0' || *server_ip == '\0')
+    if (*tunnel_name == '\0')
         usage();
 
     unsigned char key[CRYPTO_KEY_LEN];
@@ -226,5 +239,5 @@ int main(int argc, char *argv[]) {
         LOG_WARN("No PSK — DH handshake unauthenticated (MITM-vulnerable)");
     }
 
-    start_client(tunnel_name, server_ip, server_port, has_key ? key : NULL);
+    start_server(tunnel_name, server_port, has_key ? key : NULL);
 }
