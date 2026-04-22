@@ -43,18 +43,36 @@ extern int log_level;
 #define LOG_INFO(fmt, ...)  fprintf(stderr, "[INFO]  " fmt "\n", ##__VA_ARGS__)
 #define LOG_DEBUG(fmt, ...) do { if (log_level > 0) fprintf(stderr, "[DEBUG] " fmt "\n", ##__VA_ARGS__); } while(0)
 
-/* 64-bit sliding window replay protection. Returns 0 if new, -1 if duplicate/too old. */
+#define REPLAY_WINDOW_WORDS 16  /* 16 * 64 = 1024-bit sliding window */
+
+/* 1024-bit sliding window replay protection. Returns 0 if new, -1 if duplicate/too old.
+ * window[0] is the least-significant word: bit 0 = highest, bit k = highest-k. */
 static inline int check_replay(uint64_t seq, uint64_t *highest, uint64_t *window) {
     if (seq > *highest) {
         uint64_t diff = seq - *highest;
-        *window = diff < 64 ? (*window << diff) | 1ULL : 1ULL;
+        if (diff >= REPLAY_WINDOW_WORDS * 64) {
+            memset(window, 0, REPLAY_WINDOW_WORDS * sizeof(uint64_t));
+        } else {
+            int wn = (int)(diff / 64);
+            int bn = (int)(diff % 64);
+            for (int i = REPLAY_WINDOW_WORDS - 1; i >= 0; i--) {
+                int lo_src = i - wn;
+                int hi_src = lo_src - 1;
+                uint64_t lo = lo_src >= 0 ? window[lo_src] : 0;
+                uint64_t hi = (bn > 0 && hi_src >= 0) ? window[hi_src] : 0;
+                window[i] = bn > 0 ? ((lo << bn) | (hi >> (64 - bn))) : lo;
+            }
+        }
+        window[0] |= 1ULL;
         *highest = seq;
         return 0;
     }
     uint64_t diff = *highest - seq;
-    if (diff >= 64) return -1;
-    if (*window & (1ULL << diff)) return -1;
-    *window |= (1ULL << diff);
+    if (diff >= REPLAY_WINDOW_WORDS * 64) return -1;
+    int word = (int)(diff / 64);
+    int bit  = (int)(diff % 64);
+    if (window[word] & (1ULL << bit)) return -1;
+    window[word] |= (1ULL << bit);
     return 0;
 }
 

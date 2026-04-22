@@ -9,7 +9,7 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_a
     int terminate_loop = 0;
     uint64_t send_seq = 0;
     uint64_t recv_seq_highest = 0;
-    uint64_t recv_seq_window = 0;
+    uint64_t recv_seq_window[REPLAY_WINDOW_WORDS] = {0};
 
     int epoll_fd = epoll_create1(0);
     if (epoll_fd < 0) {
@@ -97,7 +97,7 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_a
                     uint64_t seq_be;
                     memcpy(&seq_be, plain_buf + HEADER_SIZE, SEQ_SIZE);
                     uint64_t seq = be64toh(seq_be);
-                    if (check_replay(seq, &recv_seq_highest, &recv_seq_window) < 0) {
+                    if (check_replay(seq, &recv_seq_highest, recv_seq_window) < 0) {
                         LOG_WARN("Replay detected (seq=%lu) — dropping", (unsigned long) seq);
                         continue;
                     }
