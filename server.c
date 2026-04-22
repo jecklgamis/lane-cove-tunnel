@@ -294,7 +294,7 @@ void usage() {
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "   -i  tunnel interface\n");
     fprintf(stderr, "   -p  server port\n");
-    fprintf(stderr, "   -K  static private key file (default: server.key, generated if absent)\n");
+    fprintf(stderr, "   -K  static private key file in PEM format (default: server.key, required)\n");
     fprintf(stderr, "   -A  allowed client public key (hex, repeatable; omit to allow all)\n");
     fprintf(stderr, "   -m  max connected clients (default: %d)\n", MAX_CLIENTS_DEFAULT);
     fprintf(stderr, "   -k  pre-shared key for handshake authentication\n");
@@ -358,7 +358,7 @@ int main(int argc, char *argv[]) {
 
     EVP_PKEY *static_key = NULL;
     unsigned char static_pub[DH_PUBKEY_LEN];
-    if (load_or_generate_static_key(keyfile, &static_key, static_pub) < 0)
+    if (load_static_key(keyfile, &static_key, static_pub) < 0)
         exit(EXIT_FAILURE);
 
     char pub_hex[DH_PUBKEY_LEN * 2 + 1];

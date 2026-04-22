@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install -y iproute2 net-tools traceroute htop kmod
 
 WORKDIR /app
 COPY . .
+COPY client.key client.crt server.crt ./
 
 RUN make all
 ENTRYPOINT ["./docker-entrypoint-client.sh"]

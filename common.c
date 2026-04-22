@@ -177,6 +177,49 @@ int load_or_generate_static_key(const char *path, EVP_PKEY **pkey_out, unsigned 
     return 0;
 }
 
+int load_public_key(const char *path, unsigned char *pub_out) {
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        LOG_ERROR("Server public key file not found: %s", path);
+        return -1;
+    }
+    EVP_PKEY *pkey = PEM_read_PUBKEY(f, NULL, NULL, NULL);
+    fclose(f);
+    if (!pkey) {
+        LOG_ERROR("Failed to parse PEM public key from %s", path);
+        return -1;
+    }
+    size_t pub_len = DH_PUBKEY_LEN;
+    int rc = EVP_PKEY_get_raw_public_key(pkey, pub_out, &pub_len) == 1 ? 0 : -1;
+    if (rc < 0)
+        LOG_ERROR("Failed to extract raw public key from %s", path);
+    EVP_PKEY_free(pkey);
+    return rc;
+}
+
+int load_static_key(const char *path, EVP_PKEY **pkey_out, unsigned char *pub_out) {
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        LOG_ERROR("Static key file not found: %s", path);
+        return -1;
+    }
+    EVP_PKEY *pkey = PEM_read_PrivateKey(f, NULL, NULL, NULL);
+    fclose(f);
+    if (!pkey) {
+        LOG_ERROR("Failed to parse PEM private key from %s", path);
+        return -1;
+    }
+    size_t pub_len = DH_PUBKEY_LEN;
+    if (EVP_PKEY_get_raw_public_key(pkey, pub_out, &pub_len) != 1) {
+        LOG_ERROR("Failed to extract public key from %s", path);
+        EVP_PKEY_free(pkey);
+        return -1;
+    }
+    *pkey_out = pkey;
+    LOG_INFO("Loaded static key from %s", path);
+    return 0;
+}
+
 static int x25519_shared_secret(EVP_PKEY *my_key, const unsigned char *peer_pub,
                                 unsigned char *secret_out) {
     EVP_PKEY *peer_key = EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, NULL, peer_pub, DH_PUBKEY_LEN);

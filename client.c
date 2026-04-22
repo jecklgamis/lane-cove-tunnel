@@ -172,18 +172,19 @@ void start_client(char *tunnel, char *ip_addr, int port, const unsigned char *ps
 const char *program_name;
 
 void usage() {
-    fprintf(stderr, "Usage : %s -i <tunnel-interface> -s <server-ip> [-p <port>] [-k <psk>] [-K <keyfile>] [-E <server-pubkey-hex>] [-v] [-h]\n",
+    fprintf(stderr, "Usage : %s -i <tunnel-interface> -s <server-ip> -C <server-cert> [-p <port>] [-k <psk>] [-K <keyfile>] [-E <server-pubkey-hex>] [-v] [-h]\n",
             program_name);
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "   -i  tunnel interface\n");
     fprintf(stderr, "   -s  server ip\n");
+    fprintf(stderr, "   -C  server public key file in PEM format (required)\n");
     fprintf(stderr, "   -p  server port (default 5040)\n");
     fprintf(stderr, "   -k  pre-shared key for handshake authentication\n");
-    fprintf(stderr, "   -K  static keypair file (default client.key)\n");
-    fprintf(stderr, "   -E  expected server public key (hex) — reject if mismatch\n");
+    fprintf(stderr, "   -K  static private key file in PEM format (default client.key, required)\n");
+    fprintf(stderr, "   -E  server public key (hex) — overrides -C\n");
     fprintf(stderr, "   -v  verbose\n");
     fprintf(stderr, "   -h  print this help message\n");
-    fprintf(stderr, "Example : %s -i lanecove-udp -s 10.10.0.1 -p 5040 -k mysecret -K client.key\n", program_name);
+    fprintf(stderr, "Example : %s -i lanecove-udp -s 10.10.0.1 -p 5040 -k mysecret -K client.key -C server.crt\n", program_name);
     exit(1);
 }
 
@@ -195,17 +196,20 @@ int main(int argc, char *argv[]) {
     char server_ip[INET_ADDRSTRLEN];
     char psk[256];
     char keyfile[256];
+    char server_cert[256];
     char server_pub_hex[DH_PUBKEY_LEN * 2 + 1];
     int has_psk = 0;
     int has_server_pub = 0;
+    int has_server_cert = 0;
 
     memset(tunnel_name, 0, IF_NAMESIZE);
     memset(server_ip, 0, INET_ADDRSTRLEN);
     memset(psk, 0, sizeof(psk));
     strncpy(keyfile, "client.key", sizeof(keyfile) - 1);
+    memset(server_cert, 0, sizeof(server_cert));
     memset(server_pub_hex, 0, sizeof(server_pub_hex));
 
-    while ((option = getopt(argc, argv, "i:s:p:k:K:E:hv")) > 0) {
+    while ((option = getopt(argc, argv, "i:s:p:k:K:C:E:hv")) > 0) {
         switch (option) {
             case 'h':
                 usage();
@@ -229,6 +233,10 @@ int main(int argc, char *argv[]) {
             case 'K':
                 strncpy(keyfile, optarg, sizeof(keyfile) - 1);
                 break;
+            case 'C':
+                strncpy(server_cert, optarg, sizeof(server_cert) - 1);
+                has_server_cert = 1;
+                break;
             case 'E':
                 strncpy(server_pub_hex, optarg, sizeof(server_pub_hex) - 1);
                 has_server_pub = 1;
@@ -244,7 +252,7 @@ int main(int argc, char *argv[]) {
 
     if (argc > 0)
         usage();
-    if (*tunnel_name == '\0' || *server_ip == '\0')
+    if (*tunnel_name == '\0' || *server_ip == '\0' || !has_server_cert)
         usage();
 
     unsigned char psk_key[CRYPTO_KEY_LEN];
@@ -257,10 +265,8 @@ int main(int argc, char *argv[]) {
 
     EVP_PKEY *static_key = NULL;
     unsigned char static_pub[DH_PUBKEY_LEN];
-    if (load_or_generate_static_key(keyfile, &static_key, static_pub) < 0) {
-        LOG_ERROR("Failed to load/generate static keypair from %s", keyfile);
+    if (load_static_key(keyfile, &static_key, static_pub) < 0)
         exit(EXIT_FAILURE);
-    }
     char pub_hex[DH_PUBKEY_LEN * 2 + 1];
     bytes_to_hex(static_pub, DH_PUBKEY_LEN, pub_hex);
     LOG_INFO("Client public key: %s", pub_hex);
@@ -273,7 +279,12 @@ int main(int argc, char *argv[]) {
         }
         LOG_INFO("Expected server public key: %s", server_pub_hex);
     } else {
-        LOG_WARN("No expected server public key — server identity not verified");
+        if (load_public_key(server_cert, server_static_pub) < 0)
+            exit(EXIT_FAILURE);
+        char pub_hex[DH_PUBKEY_LEN * 2 + 1];
+        bytes_to_hex(server_static_pub, DH_PUBKEY_LEN, pub_hex);
+        LOG_INFO("Expected server public key (from %s): %s", server_cert, pub_hex);
+        has_server_pub = 1;
     }
 
     start_client(tunnel_name, server_ip, server_port,

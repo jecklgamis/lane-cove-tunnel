@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <sys/epoll.h>
 #include <openssl/evp.h>
+#include <openssl/pem.h>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <openssl/hmac.h>
@@ -62,6 +63,8 @@ void derive_key(const char *psk, unsigned char *key);
 void bytes_to_hex(const unsigned char *bytes, int len, char *hex_out);
 int hex_to_bytes(const char *hex, unsigned char *bytes_out, int expected_len);
 int load_or_generate_static_key(const char *path, EVP_PKEY **pkey_out, unsigned char *pub_out);
+int load_static_key(const char *path, EVP_PKEY **pkey_out, unsigned char *pub_out);
+int load_public_key(const char *path, unsigned char *pub_out);
 int encrypt_packet(const unsigned char *key, const unsigned char *plain, int plain_len,
                    unsigned char *out, int *out_len);
 int decrypt_packet(const unsigned char *key, const unsigned char *in, int in_len,
