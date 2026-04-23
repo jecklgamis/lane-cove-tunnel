@@ -105,6 +105,24 @@ $ RELAY_IP=<relay-public-ip> ./run-peer-b-in-docker.sh
 
 Override host ports with `PEER_A_HOST_PORT` / `PEER_B_HOST_PORT` if the defaults conflict with other services.
 
+### Envoy TCP Proxy
+
+Each peer container includes an [Envoy](https://www.envoyproxy.io/) proxy. When `ENVOY_UPSTREAM_HOST` is set, Envoy starts a TCP listener on port `15040` and forwards connections to the configured upstream — useful for proxying traffic across the tunnel to a service running on a remote peer.
+
+By default:
+- peer-a proxies to `10.9.0.3:80` (peer-b's nginx), exposed on host port `15042`
+- peer-b proxies to `10.9.0.2:80` (peer-a's nginx), exposed on host port `15043`
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ENVOY_UPSTREAM_HOST` | — | Upstream host; if unset, Envoy is not started |
+| `ENVOY_UPSTREAM_PORT` | `80` | Upstream port |
+
+```bash
+# Proxy through peer-a's Envoy to peer-b's nginx (from your Mac)
+$ curl http://localhost:15042
+```
+
 > **Note (Docker Desktop on Mac):** Without pinned host ports, Docker Desktop's userspace NAT can remap the UDP source port between the handshake and subsequent data packets, causing the relay to drop traffic as "unknown peer".
 
 ### Testing
