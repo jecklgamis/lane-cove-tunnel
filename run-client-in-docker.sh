@@ -11,6 +11,8 @@ docker run \
   -e TUNNEL_NAME="${TUNNEL_NAME}" \
   -e SERVER_IP="${SERVER_IP}" \
   -e SERVER_PORT="${SERVER_PORT}" \
+  -e CLIENT_IP="${CLIENT_IP:-10.9.0.1/24}" \
+  -e REMOTE_SUBNET="${REMOTE_SUBNET:-10.10.0.0/24}" \
   --add-host="host.docker.internal:host-gateway" \
   -p 15040:15040 \
   -p 9901:9901 \

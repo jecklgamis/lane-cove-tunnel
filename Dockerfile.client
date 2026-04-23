@@ -3,7 +3,7 @@ FROM envoyproxy/envoy:v1.35-latest AS builder
 RUN apt-get update && apt-get install -y gcc make libssl-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY common.c common.h client.c ./
+COPY src/common.c src/common.h src/client.c ./
 RUN gcc -o client client.c common.c -lssl -lcrypto
 
 FROM envoyproxy/envoy:v1.35-latest

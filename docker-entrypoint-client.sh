@@ -2,6 +2,8 @@
 TUNNEL_NAME=${TUNNEL_NAME:-lanecove.0}
 SERVER_IP=${SERVER_IP:-some-remote-ip}
 SERVER_PORT=${SERVER_PORT:-5040}
+CLIENT_IP=${CLIENT_IP:-10.9.0.1/24}
+export CLIENT_IP
 ./create-client-tunnel.sh
 envoy -c /etc/envoy/envoy.yaml -l error  2>&1 &
 ENVOY_PID=$!

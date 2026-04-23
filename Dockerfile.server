@@ -3,7 +3,7 @@ FROM debian:bookworm-slim AS builder
 RUN apt-get update && apt-get install -y gcc make libssl-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY common.c common.h rcunit_list.c rcunit_list.h server.c ./
+COPY src/common.c src/common.h src/rcunit_list.c src/rcunit_list.h src/server.c ./
 RUN gcc -o server server.c common.c rcunit_list.c -lssl -lcrypto
 
 FROM debian:bookworm-slim
