@@ -2,6 +2,7 @@
 #include "common.h"
 
 #define REKEY_AFTER_SECS          180
+#define REKEY_INITIATE_SECS       144   /* start rekeying at 80% of interval */
 #define HANDSHAKE_COOLDOWN_SECS     5
 #define HANDSHAKE_TIMEOUT_SECS      5
 #define RECONNECT_INTERVAL_SECS    30
@@ -33,6 +34,7 @@ typedef struct {
     time_t             last_seen;
     time_t             last_handshake;
     time_t             rekey_deadline;
+    int                rekeying;
     uint64_t           send_seq;
     uint64_t           recv_seq_highest;
     uint64_t           recv_seq_window[REPLAY_WINDOW_WORDS];
@@ -41,10 +43,20 @@ typedef struct {
     int                is_outbound;
 } peer_session_t;
 
+/* Pending outbound handshake — initiated but awaiting response in the epoll loop */
+typedef struct {
+    int                active;
+    int                cfg_idx;
+    time_t             sent_at;
+    hs_client_state_t  hs_state;
+    struct sockaddr_in server_addr;
+} pending_hs_t;
+
 static peer_config_t  peer_configs[MAX_PEERS];
 static int            peer_config_count = 0;
 static peer_session_t sessions[MAX_PEERS];
 static int            session_slots = 0;
+static pending_hs_t   pending_hs[MAX_PEERS];
 
 static int parse_cidr(const char *cidr, ip_prefix_t *out) {
     char buf[32];
@@ -138,6 +150,7 @@ static void session_init(peer_session_t *s, struct sockaddr_in *addr,
     s->last_seen = 0;
     s->last_handshake = time(NULL);
     s->rekey_deadline = time(NULL) + REKEY_AFTER_SECS;
+    s->rekeying = 0;
     s->send_seq = 0;
     s->recv_seq_highest = 0;
     memset(s->recv_seq_window, 0, sizeof(s->recv_seq_window));
@@ -204,39 +217,39 @@ static void forward_to_peer(int sock_fd, peer_session_t *s,
     sendto(sock_fd, wire_buf, enc_len, 0, (struct sockaddr *)&s->addr, sizeof(s->addr));
 }
 
-/* Initiate a handshake to an outbound peer. Blocks for up to HANDSHAKE_TIMEOUT_SECS.
- * During this window, data packets from other peers may be lost. Acceptable for a
- * small number of peers where rekeying is infrequent (every 5 minutes). */
-static int do_outbound_handshake(int sock_fd, peer_config_t *cfg,
-                                 EVP_PKEY *static_key, const unsigned char *static_pub,
-                                 const unsigned char *psk_key) {
+/* Send a handshake initiation to an outbound peer and register a pending entry.
+ * Returns immediately — the response is handled asynchronously in the epoll loop.
+ * The old session (if any) stays active and keeps forwarding until the response
+ * arrives and session_init atomically replaces the key. */
+static int initiate_outbound_handshake(int sock_fd, int cfg_idx,
+                                       EVP_PKEY *static_key, const unsigned char *static_pub,
+                                       const unsigned char *psk_key) {
+    peer_config_t *cfg = &peer_configs[cfg_idx];
     cfg->last_attempt = time(NULL);
+
+    int slot = -1;
+    for (int i = 0; i < MAX_PEERS; i++) {
+        if (!pending_hs[i].active) { slot = i; break; }
+    }
+    if (slot < 0) {
+        LOG_WARN("No pending handshake slots available");
+        return -1;
+    }
 
     char ip_str[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &cfg->endpoint.sin_addr, ip_str, sizeof(ip_str));
     LOG_INFO("Initiating handshake to %s:%d", ip_str, ntohs(cfg->endpoint.sin_port));
 
-    struct timeval tv = { HANDSHAKE_TIMEOUT_SECS, 0 };
-    setsockopt(sock_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    unsigned char session_key[CRYPTO_KEY_LEN];
-    int rc = handshake_client(sock_fd, &cfg->endpoint, psk_key,
-                               static_key, static_pub, cfg->pub, session_key);
-    tv.tv_sec = 0;
-    setsockopt(sock_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-
-    if (rc < 0) {
-        LOG_WARN("Handshake to %s:%d failed — will retry in %ds",
-                 ip_str, ntohs(cfg->endpoint.sin_port), RECONNECT_INTERVAL_SECS);
+    pending_hs_t *p = &pending_hs[slot];
+    if (handshake_client_send(sock_fd, &cfg->endpoint, psk_key,
+                               static_key, static_pub, cfg->pub, &p->hs_state) < 0) {
+        LOG_WARN("Handshake initiation to %s:%d failed", ip_str, ntohs(cfg->endpoint.sin_port));
         return -1;
     }
-    peer_session_t *s = alloc_session(cfg->pub, &cfg->endpoint);
-    if (!s) {
-        LOG_WARN("Session table full — cannot connect to %s:%d",
-                 ip_str, ntohs(cfg->endpoint.sin_port));
-        return -1;
-    }
-    session_init(s, &cfg->endpoint, cfg->pub, session_key, cfg, 1);
-    print_sessions();
+    p->active     = 1;
+    p->cfg_idx    = cfg_idx;
+    p->sent_at    = time(NULL);
+    p->server_addr = cfg->endpoint;
     return 0;
 }
 
@@ -270,12 +283,28 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
                 peer_config_t *cfg = &peer_configs[i];
                 if (!cfg->has_endpoint) continue;
                 peer_session_t *s = find_session_by_pub(cfg->pub);
-                int needs = !s || now >= s->rekey_deadline;
+                int needs = !s || (now >= s->last_handshake + REKEY_INITIATE_SECS && !s->rekeying);
                 int ready  = now - cfg->last_attempt >= RECONNECT_INTERVAL_SECS;
                 if (needs && ready) {
-                    if (s) s->active = 0;
-                    do_outbound_handshake(sock_fd, cfg, static_key, static_pub, psk_key);
+                    if (s) s->rekeying = 1;
+                    if (initiate_outbound_handshake(sock_fd, i, static_key, static_pub, psk_key) < 0)
+                        if (s) s->rekeying = 0;
                 }
+            }
+            /* Expire timed-out pending handshakes */
+            for (int j = 0; j < MAX_PEERS; j++) {
+                pending_hs_t *p = &pending_hs[j];
+                if (!p->active || now - p->sent_at < HANDSHAKE_TIMEOUT_SECS) continue;
+                char ip_str[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &peer_configs[p->cfg_idx].endpoint.sin_addr, ip_str, sizeof(ip_str));
+                LOG_WARN("Handshake to %s:%d timed out — will retry in %ds",
+                         ip_str, ntohs(peer_configs[p->cfg_idx].endpoint.sin_port),
+                         RECONNECT_INTERVAL_SECS);
+                EVP_PKEY_free(p->hs_state.eph_key);
+                p->hs_state.eph_key = NULL;
+                p->active = 0;
+                peer_session_t *ts = find_session_by_pub(peer_configs[p->cfg_idx].pub);
+                if (ts) ts->rekeying = 0;
             }
         }
 
@@ -313,8 +342,62 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
 
             now = time(NULL);
 
+            /* Response to a pending outbound handshake — check before inbound path */
+            if (nr == hs_size && memcmp(wire_buf, pkt_header, HEADER_SIZE) == 0) {
+                int handled = 0;
+                for (int j = 0; j < MAX_PEERS; j++) {
+                    pending_hs_t *p = &pending_hs[j];
+                    if (!p->active) continue;
+                    if (p->server_addr.sin_addr.s_addr != src_addr.sin_addr.s_addr ||
+                        p->server_addr.sin_port        != src_addr.sin_port) continue;
+                    peer_config_t *cfg = &peer_configs[p->cfg_idx];
+                    unsigned char session_key[CRYPTO_KEY_LEN];
+                    p->active = 0;
+                    if (handshake_client_recv(wire_buf, (int)nr, psk_key,
+                                              static_key, static_pub, cfg->pub,
+                                              &p->hs_state, session_key) == 0) {
+                        peer_session_t *s = alloc_session(cfg->pub, &src_addr);
+                        if (s) {
+                            session_init(s, &src_addr, cfg->pub, session_key, cfg, 1);
+                            print_sessions();
+                        }
+                    } else {
+                        peer_session_t *s = find_session_by_pub(cfg->pub);
+                        if (s) s->rekeying = 0;
+                    }
+                    handled = 1;
+                    break;
+                }
+                if (handled) continue;
+            }
+
             /* Inbound handshake */
             if (nr == hs_size && memcmp(wire_buf, pkt_header, HEADER_SIZE) == 0) {
+                /* Tie-breaking: if we have a pending outbound to this peer, the side
+                 * with the higher pub key wins and ignores the inbound initiation. */
+                int skip = 0;
+                for (int j = 0; j < MAX_PEERS; j++) {
+                    pending_hs_t *p = &pending_hs[j];
+                    if (!p->active) continue;
+                    if (p->server_addr.sin_addr.s_addr != src_addr.sin_addr.s_addr ||
+                        p->server_addr.sin_port        != src_addr.sin_port) continue;
+                    if (memcmp(static_pub, peer_configs[p->cfg_idx].pub, DH_PUBKEY_LEN) > 0) {
+                        LOG_DEBUG("Rekey collision from %s:%d — ignoring (we have higher pub key)",
+                                  inet_ntoa(src_addr.sin_addr), ntohs(src_addr.sin_port));
+                        skip = 1;
+                    } else {
+                        LOG_INFO("Rekey collision from %s:%d — yielding (we have lower pub key)",
+                                 inet_ntoa(src_addr.sin_addr), ntohs(src_addr.sin_port));
+                        EVP_PKEY_free(p->hs_state.eph_key);
+                        p->hs_state.eph_key = NULL;
+                        p->active = 0;
+                        peer_session_t *s = find_session_by_pub(peer_configs[p->cfg_idx].pub);
+                        if (s) s->rekeying = 0;
+                    }
+                    break;
+                }
+                if (skip) continue;
+
                 peer_session_t *existing = find_session_by_addr(&src_addr);
                 if (existing && now - existing->last_handshake < HANDSHAKE_COOLDOWN_SECS) {
                     LOG_WARN("Handshake cooldown for %s:%d — ignoring",

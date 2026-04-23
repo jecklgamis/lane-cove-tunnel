@@ -321,11 +321,11 @@ err:
     return -1;
 }
 
-int handshake_client(int sock_fd, struct sockaddr_in *server_addr,
-                     const unsigned char *psk_key,
-                     EVP_PKEY *static_key, const unsigned char *static_pub,
-                     const unsigned char *server_static_pub,
-                     unsigned char *session_key) {
+int handshake_client_send(int sock_fd, struct sockaddr_in *server_addr,
+                          const unsigned char *psk_key,
+                          EVP_PKEY *static_key, const unsigned char *static_pub,
+                          const unsigned char *server_static_pub,
+                          hs_client_state_t *state_out) {
     if (!server_static_pub) {
         LOG_ERROR("Server static public key required for identity hiding");
         return -1;
@@ -376,22 +376,30 @@ int handshake_client(int sock_fd, struct sockaddr_in *server_addr,
         return -1;
     }
 
-    unsigned char resp[HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN + HMAC_LEN];
-    ssize_t nr = recvfrom(sock_fd, resp, sizeof(resp), 0, NULL, NULL);
+    state_out->eph_key = eph_key;
+    memcpy(state_out->eph_pub, eph_pub, DH_PUBKEY_LEN);
+    memcpy(state_out->ecdh_ec_ss, ecdh_ec_ss, DH_PUBKEY_LEN);
+    return 0;
+}
+
+int handshake_client_recv(const unsigned char *resp, int resp_len,
+                          const unsigned char *psk_key,
+                          EVP_PKEY *static_key, const unsigned char *static_pub,
+                          const unsigned char *server_static_pub,
+                          hs_client_state_t *state,
+                          unsigned char *session_key_out) {
     int expected = HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN + (psk_key ? HMAC_LEN : 0);
-    if (nr != expected) {
-        LOG_ERROR("Handshake response size mismatch: got %zd, expected %d", nr, expected);
-        EVP_PKEY_free(eph_key);
+    if (resp_len != expected) {
+        LOG_ERROR("Handshake response size mismatch: got %d, expected %d", resp_len, expected);
         return -1;
     }
     if (memcmp(resp, pkt_header, HEADER_SIZE) != 0) {
         LOG_ERROR("Handshake response has bad magic");
-        EVP_PKEY_free(eph_key);
         return -1;
     }
 
-    const unsigned char *server_eph_pub      = resp + HEADER_SIZE;
-    const unsigned char *enc_server_static   = resp + HEADER_SIZE + DH_PUBKEY_LEN;
+    const unsigned char *server_eph_pub    = resp + HEADER_SIZE;
+    const unsigned char *enc_server_static = resp + HEADER_SIZE + DH_PUBKEY_LEN;
 
     if (psk_key) {
         unsigned char expected_hmac[HMAC_LEN];
@@ -400,16 +408,14 @@ int handshake_client(int sock_fd, struct sockaddr_in *server_addr,
             memcmp(resp + HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN,
                    expected_hmac, HMAC_LEN) != 0) {
             LOG_ERROR("Server handshake HMAC verification failed — possible MITM");
-            EVP_PKEY_free(eph_key);
             return -1;
         }
     }
 
     /* ecdh_eph = DH(eph_c, eph_s) — also used as server identity decryption key */
     unsigned char ecdh_eph[DH_PUBKEY_LEN];
-    if (x25519_shared_secret(eph_key, server_eph_pub, ecdh_eph) < 0) {
+    if (x25519_shared_secret(state->eph_key, server_eph_pub, ecdh_eph) < 0) {
         LOG_ERROR("X25519 key derivation failed");
-        EVP_PKEY_free(eph_key);
         return -1;
     }
 
@@ -417,28 +423,27 @@ int handshake_client(int sock_fd, struct sockaddr_in *server_addr,
     unsigned char server_static_pub_recv[DH_PUBKEY_LEN];
     if (decrypt_identity(ecdh_eph, enc_server_static, server_static_pub_recv) < 0) {
         LOG_ERROR("Failed to decrypt server identity — possible MITM");
-        EVP_PKEY_free(eph_key);
         return -1;
     }
 
     if (memcmp(server_static_pub_recv, server_static_pub, DH_PUBKEY_LEN) != 0) {
         LOG_ERROR("Server static public key mismatch — possible MITM");
-        EVP_PKEY_free(eph_key);
         return -1;
     }
 
     unsigned char ecdh_sc_es[DH_PUBKEY_LEN];
     if (x25519_shared_secret(static_key, server_eph_pub, ecdh_sc_es) < 0) {
         LOG_ERROR("X25519 key derivation failed");
-        EVP_PKEY_free(eph_key);
         return -1;
     }
 
-    derive_session_key(ecdh_eph, ecdh_sc_es, ecdh_ec_ss,
-                       eph_pub, server_eph_pub,
+    derive_session_key(ecdh_eph, ecdh_sc_es, state->ecdh_ec_ss,
+                       state->eph_pub, server_eph_pub,
                        static_pub, server_static_pub_recv,
-                       session_key);
-    EVP_PKEY_free(eph_key);
+                       session_key_out);
+
+    EVP_PKEY_free(state->eph_key);
+    state->eph_key = NULL;
 
     char pub_hex[DH_PUBKEY_LEN * 2 + 1];
     bytes_to_hex(server_static_pub_recv, 8, pub_hex);

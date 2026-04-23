@@ -112,11 +112,28 @@ int decrypt_packet(const unsigned char *key, const unsigned char *in, int in_len
  * Server returns client_static_pub for allowlist check by caller.
  */
 #define HS_ENCRYPTED_PUB_LEN (DH_PUBKEY_LEN + CRYPTO_TAG_LEN)  /* 32 + 16 = 48 */
-int handshake_client(int sock_fd, struct sockaddr_in *server_addr,
-                     const unsigned char *psk_key,
-                     EVP_PKEY *static_key, const unsigned char *static_pub,
-                     const unsigned char *server_static_pub,
-                     unsigned char *session_key);
+
+/* State carried between the send and receive phases of an outbound handshake. */
+typedef struct {
+    EVP_PKEY      *eph_key;
+    unsigned char  eph_pub[DH_PUBKEY_LEN];
+    unsigned char  ecdh_ec_ss[DH_PUBKEY_LEN];
+} hs_client_state_t;
+
+/* Send the handshake initiation packet; fill state_out for use by handshake_client_recv. */
+int handshake_client_send(int sock_fd, struct sockaddr_in *server_addr,
+                          const unsigned char *psk_key,
+                          EVP_PKEY *static_key, const unsigned char *static_pub,
+                          const unsigned char *server_static_pub,
+                          hs_client_state_t *state_out);
+
+/* Complete the handshake given the server's response; frees state->eph_key on success. */
+int handshake_client_recv(const unsigned char *resp, int resp_len,
+                          const unsigned char *psk_key,
+                          EVP_PKEY *static_key, const unsigned char *static_pub,
+                          const unsigned char *server_static_pub,
+                          hs_client_state_t *state,
+                          unsigned char *session_key_out);
 
 int handshake_server_respond(int sock_fd, const unsigned char *pkt, int pkt_len,
                              struct sockaddr_in *peer_addr,
