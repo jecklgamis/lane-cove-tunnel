@@ -1,7 +1,7 @@
 #include <time.h>
 #include "common.h"
 
-#define REKEY_AFTER_SECS          300
+#define REKEY_AFTER_SECS          180
 #define HANDSHAKE_COOLDOWN_SECS     5
 #define HANDSHAKE_TIMEOUT_SECS      5
 #define RECONNECT_INTERVAL_SECS    30

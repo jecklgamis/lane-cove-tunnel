@@ -5,7 +5,7 @@ A simple Linux hub-and-spoke layer 3 overlay network using a TUN virtual interfa
 
 ## Architecture
 
-- `peer.c` — symmetric peer binary. Binds a UDP socket, accepts inbound handshakes, and initiates outbound connections to peers with a configured endpoint (`-E`). Maintains a session table with per-peer AllowedIPs, sequence counters, and replay windows. Periodically checks whether outbound peers need rekeying (every 5 minutes).
+- `peer.c` — symmetric peer binary. Binds a UDP socket, accepts inbound handshakes, and initiates outbound connections to peers with a configured endpoint (`-E`). Maintains a session table with per-peer AllowedIPs, sequence counters, and replay windows. Periodically checks whether outbound peers need rekeying (every 3 minutes).
 - `common.c/h` — TUN interface allocation, logging macros, AES-256-GCM encrypt/decrypt helpers, X25519 DH handshake functions with identity hiding, and a 2048-bit sliding-window replay-protection implementation.
 
 ### Topology
