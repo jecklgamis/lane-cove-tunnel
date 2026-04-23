@@ -37,7 +37,7 @@ docker build -f Dockerfile.peer \
   --build-arg CRT_FILE="${PEER_A_CRT}" \
   -t lane-cove-tunnel-peer-a:latest .
 
-PEER_A_HOST_PORT=${PEER_A_HOST_PORT:-5040}
+PEER_A_HOST_PORT=${PEER_A_HOST_PORT:-5041}
 
 docker run \
   --cap-add=NET_ADMIN \
