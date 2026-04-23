@@ -53,8 +53,6 @@ static_resources:
               socket_address:
                 address: ${ENVOY_UPSTREAM_HOST}
                 port_value: ${ENVOY_UPSTREAM_PORT}
-    http_protocol_options:
-      max_pipelined_requests: 100
     upstream_connection_options:
       tcp_keepalive:
         keepalive_probes: 3
