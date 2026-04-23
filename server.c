@@ -193,9 +193,9 @@ static void forward_to_client(int sock_fd, udp_client_t *c,
     if (sent < 0)
         LOG_ERROR("sendto() failed for %s:%d : %s",
                   inet_ntoa(c->addr.sin_addr), ntohs(c->addr.sin_port), strerror(errno));
-    else
-        LOG_DEBUG("TUN -> UDP [%s:%d]: %zd bytes",
-                  inet_ntoa(c->addr.sin_addr), ntohs(c->addr.sin_port), sent);
+    //else
+    //    LOG_DEBUG("TUN -> UDP [%s:%d]: %zd bytes",
+    //              inet_ntoa(c->addr.sin_addr), ntohs(c->addr.sin_port), sent);
 }
 
 static void udp_event_loop(int tun_fd, int sock_fd, const unsigned char *psk_key,
@@ -363,8 +363,8 @@ static void udp_event_loop(int tun_fd, int sock_fd, const unsigned char *psk_key
                     terminate_loop = 1;
                     break;
                 }
-                LOG_DEBUG("UDP -> TUN [%s:%d]: %zd bytes",
-                          inet_ntoa(src_addr.sin_addr), ntohs(src_addr.sin_port), nr_written);
+                //LOG_DEBUG("UDP -> TUN [%s:%d]: %zd bytes",
+                //          inet_ntoa(src_addr.sin_addr), ntohs(src_addr.sin_port), nr_written);
             }
         }
     }

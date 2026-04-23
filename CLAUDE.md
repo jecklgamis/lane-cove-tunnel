@@ -67,7 +67,12 @@ When a client reconnects on a new source port (e.g. after a container restart or
 The server enforces a 5-second cooldown between handshakes per address and per public key to prevent handshake flooding. New client slots are only consumed for truly new public keys; rekeying existing clients is not counted against `max_clients`.
 
 ## Logging
-Custom `fprintf`-based logging defined in `common.h`. Global `log_level` variable (0=INFO, 1=DEBUG). Pass `-v` flag to enable debug output.
+Custom `fprintf`-based logging defined in `common.h`. Global `log_level` variable (0=INFO, 1=DEBUG). Pass `-v` flag to enable debug output. All log lines include a timestamp:
+```
+2026-04-23 14:05:32 [INFO]  Connected to 10.10.0.1:5040
+2026-04-23 14:05:32 [WARN]  Replay detected (seq=42) — dropping
+```
+Per-packet `TUN -> UDP` and `UDP -> TUN` debug logs are commented out by default to reduce noise.
 
 ## Build
 ```
@@ -86,9 +91,9 @@ docker run --privileged -it lane-cove-tunnel-udp-client:latest /bin/bash
 
 ## Docker
 - `Dockerfile.server` — server image; copies `server.key`, `server.crt`, `client.crt` into the image
-- `Dockerfile.client` — client image; copies `client.key`, `client.crt`, `server.crt` into the image
+- `Dockerfile.client` — two-stage build: compiles client in `envoyproxy/envoy:v1.35-latest`, runs in the same base with Envoy, curl, and network tools; copies `client.key`, `client.crt`, `server.crt` into the image
 - `docker-entrypoint-server.sh` — extracts client public key from `client.crt`, creates tunnel, starts nginx, starts server
-- `docker-entrypoint-client.sh` — creates tunnel, starts client with server cert pinning
+- `docker-entrypoint-client.sh` — creates tunnel, starts Envoy proxy (port 15040 → 10.10.0.1:80), starts client with server cert pinning
 - `run-server-in-docker.sh` — builds server image and runs container, exposes UDP port
 - `run-client-in-docker.sh` — builds client image and runs container, auto-detects host IP from en0/en1
 

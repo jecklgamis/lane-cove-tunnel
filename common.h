@@ -38,10 +38,18 @@ extern const unsigned char pkt_header[HEADER_SIZE];
 
 extern int log_level;
 
-#define LOG_ERROR(fmt, ...) fprintf(stderr, "[ERROR] " fmt "\n", ##__VA_ARGS__)
-#define LOG_WARN(fmt, ...)  fprintf(stderr, "[WARN]  " fmt "\n", ##__VA_ARGS__)
-#define LOG_INFO(fmt, ...)  fprintf(stderr, "[INFO]  " fmt "\n", ##__VA_ARGS__)
-#define LOG_DEBUG(fmt, ...) do { if (log_level > 0) fprintf(stderr, "[DEBUG] " fmt "\n", ##__VA_ARGS__); } while(0)
+static inline const char *log_timestamp(void) {
+    static char buf[32];
+    time_t t = time(NULL);
+    struct tm *tm_info = localtime(&t);
+    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", tm_info);
+    return buf;
+}
+
+#define LOG_ERROR(fmt, ...) fprintf(stderr, "%s [ERROR] " fmt "\n", log_timestamp(), ##__VA_ARGS__)
+#define LOG_WARN(fmt, ...)  fprintf(stderr, "%s [WARN]  " fmt "\n", log_timestamp(), ##__VA_ARGS__)
+#define LOG_INFO(fmt, ...)  fprintf(stderr, "%s [INFO]  " fmt "\n", log_timestamp(), ##__VA_ARGS__)
+#define LOG_DEBUG(fmt, ...) do { if (log_level > 0) fprintf(stderr, "%s [DEBUG] " fmt "\n", log_timestamp(), ##__VA_ARGS__); } while(0)
 
 #define REPLAY_WINDOW_WORDS 32  /* 32 * 64 = 2048-bit sliding window */
 

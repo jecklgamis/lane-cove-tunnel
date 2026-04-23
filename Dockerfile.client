@@ -9,7 +9,7 @@ RUN make all
 FROM envoyproxy/envoy:v1.35-latest
 
 RUN apt-get update && apt-get install -y \
-    iproute2 net-tools traceroute htop kmod iputils-ping tshark tcpdump libssl-dev \
+    iproute2 net-tools traceroute htop kmod iputils-ping tshark tcpdump libssl-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -83,7 +83,7 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_a
                     terminate_loop = 1;
                     break;
                 }
-                LOG_DEBUG("TUN -> UDP: Wrote %zd bytes", nr_written);
+                //LOG_DEBUG("TUN -> UDP: Wrote %zd bytes", nr_written);
             } else {
                 nr_read = recvfrom(sock_fd, wire_buf, sizeof(wire_buf), 0, NULL, NULL);
                 if (nr_read < 0) {
@@ -127,7 +127,7 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_a
                     terminate_loop = 1;
                     break;
                 }
-                LOG_DEBUG("UDP -> TUN: Wrote %zd bytes", nr_written);
+                //LOG_DEBUG("UDP -> TUN: Wrote %zd bytes", nr_written);
             }
         }
     }
