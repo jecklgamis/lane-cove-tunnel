@@ -1,5 +1,7 @@
 #include "common.h"
 
+#define REKEY_AFTER_SECS 300
+
 static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_addr,
                            const unsigned char *key) {
     unsigned char buffer[BUFFER_SIZE];
@@ -10,6 +12,7 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_a
     uint64_t send_seq = 0;
     uint64_t recv_seq_highest = 0;
     uint64_t recv_seq_window[REPLAY_WINDOW_WORDS] = {0};
+    time_t rekey_deadline = time(NULL) + REKEY_AFTER_SECS;
 
     int epoll_fd = epoll_create1(0);
     if (epoll_fd < 0) {
@@ -33,6 +36,10 @@ static void udp_event_loop(int tun_fd, int sock_fd, struct sockaddr_in *server_a
     }
 
     while (!terminate_loop) {
+        if (time(NULL) >= rekey_deadline) {
+            LOG_INFO("Rekey interval reached — initiating rekey");
+            break;
+        }
         int nfds = epoll_wait(epoll_fd, events, 2, 500);
         if (nfds < 0) {
             LOG_ERROR("epoll_wait() failed : %s", strerror(errno));
@@ -164,7 +171,7 @@ void start_client(char *tunnel, char *ip_addr, int port, const unsigned char *ps
 
         udp_event_loop(tun_fd, sock_fd, &server_addr, session_key);
 
-        LOG_INFO("Disconnected from %s:%d, reconnecting", ip_addr, port);
+        LOG_INFO("Session ended for %s:%d, reconnecting", ip_addr, port);
         close(sock_fd);
     }
 }

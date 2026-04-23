@@ -269,21 +269,18 @@ static void udp_event_loop(int tun_fd, int sock_fd, const unsigned char *psk_key
                     terminate_loop = 1;
                     break;
                 }
-                int hs_size = HEADER_SIZE + DH_PUBKEY_LEN * 2 + (psk_key ? HMAC_LEN : 0);
+                int hs_size = HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN + (psk_key ? HMAC_LEN : 0);
                 if (nr_read == hs_size && memcmp(wire_buf, pkt_header, HEADER_SIZE) == 0) {
-                    udp_client_t *existing = find_client(&src_addr);
-                    if (existing) {
-                        time_t elapsed = time(NULL) - existing->last_handshake;
+                    /* Fast-path cooldown by address — rejects storms from the same port */
+                    udp_client_t *existing_by_addr = find_client(&src_addr);
+                    if (existing_by_addr) {
+                        time_t elapsed = time(NULL) - existing_by_addr->last_handshake;
                         if (elapsed < HANDSHAKE_COOLDOWN_SECS) {
                             LOG_WARN("Handshake cooldown active for %s:%d (%lds remaining) — ignoring",
                                      inet_ntoa(src_addr.sin_addr), ntohs(src_addr.sin_port),
                                      (long)(HANDSHAKE_COOLDOWN_SECS - elapsed));
                             continue;
                         }
-                    } else if (rcu_get_list_size(&client_list) >= max_clients) {
-                        LOG_WARN("Max clients (%d) reached — rejecting handshake from %s:%d",
-                                 max_clients, inet_ntoa(src_addr.sin_addr), ntohs(src_addr.sin_port));
-                        continue;
                     }
                     LOG_INFO("Handshake from %s:%d",
                              inet_ntoa(src_addr.sin_addr), ntohs(src_addr.sin_port));
@@ -299,6 +296,22 @@ static void udp_event_loop(int tun_fd, int sock_fd, const unsigned char *psk_key
                         char key_hex[DH_PUBKEY_LEN * 2 + 1];
                         bytes_to_hex(client_static_pub, DH_PUBKEY_LEN, key_hex);
                         LOG_WARN("Rejecting client with unknown public key: %s", key_hex);
+                        continue;
+                    }
+                    /* Cooldown and max-clients checked by pub key — handles clients
+                     * reconnecting on a new port (e.g. rekey from a restarted socket) */
+                    udp_client_t *existing_by_pub = find_client_by_pub(client_static_pub);
+                    if (existing_by_pub) {
+                        time_t elapsed = time(NULL) - existing_by_pub->last_handshake;
+                        if (elapsed < HANDSHAKE_COOLDOWN_SECS) {
+                            LOG_WARN("Handshake cooldown active for key %s (%lds remaining) — ignoring",
+                                     inet_ntoa(src_addr.sin_addr),
+                                     (long)(HANDSHAKE_COOLDOWN_SECS - elapsed));
+                            continue;
+                        }
+                    } else if (rcu_get_list_size(&client_list) >= max_clients) {
+                        LOG_WARN("Max clients (%d) reached — rejecting new client from %s:%d",
+                                 max_clients, inet_ntoa(src_addr.sin_addr), ntohs(src_addr.sin_port));
                         continue;
                     }
                     add_or_update_client(&src_addr, client_static_pub, session_key, ac);

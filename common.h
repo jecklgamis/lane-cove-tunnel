@@ -43,7 +43,7 @@ extern int log_level;
 #define LOG_INFO(fmt, ...)  fprintf(stderr, "[INFO]  " fmt "\n", ##__VA_ARGS__)
 #define LOG_DEBUG(fmt, ...) do { if (log_level > 0) fprintf(stderr, "[DEBUG] " fmt "\n", ##__VA_ARGS__); } while(0)
 
-#define REPLAY_WINDOW_WORDS 16  /* 16 * 64 = 1024-bit sliding window */
+#define REPLAY_WINDOW_WORDS 32  /* 32 * 64 = 2048-bit sliding window */
 
 /* 1024-bit sliding window replay protection. Returns 0 if new, -1 if duplicate/too old.
  * window[0] is the least-significant word: bit 0 = highest, bit k = highest-k. */
@@ -90,14 +90,20 @@ int decrypt_packet(const unsigned char *key, const unsigned char *in, int in_len
 
 /*
  * Handshake wire format (both directions):
- *   [8 magic][32 eph_pub][32 static_pub][32 HMAC-SHA256(psk, eph_pub||static_pub)]?
+ *   [8 magic][32 eph_pub][48 AES-256-GCM(identity_key, static_pub)][32 HMAC-SHA256(psk, ...)]?
+ *
+ * Identity encryption (hides static public keys from passive observers):
+ *   Client encrypts its static_pub with key = SHA-256(DH(eph_c, server_static))
+ *   Server encrypts its static_pub with key = SHA-256(DH(eph_s, eph_c))
+ *   AES-256-GCM uses a zero IV — safe because the key is derived from a fresh ephemeral DH each time.
  *
  * Session key: SHA-256(ECDH(eph_c,eph_s) || ECDH(static_c,eph_s) || ECDH(eph_c,static_s)
  *                      || client_eph_pub || server_eph_pub || client_static_pub || server_static_pub)
  *
- * Client verifies server_static_pub matches expected (if provided).
+ * Client must know server_static_pub (via -C) to encrypt its identity.
  * Server returns client_static_pub for allowlist check by caller.
  */
+#define HS_ENCRYPTED_PUB_LEN (DH_PUBKEY_LEN + CRYPTO_TAG_LEN)  /* 32 + 16 = 48 */
 int handshake_client(int sock_fd, struct sockaddr_in *server_addr,
                      const unsigned char *psk_key,
                      EVP_PKEY *static_key, const unsigned char *static_pub,

@@ -276,11 +276,61 @@ static int compute_hmac(const unsigned char *psk_key,
                 hmac_out, &hlen) ? 0 : -1;
 }
 
+/* Encrypt a 32-byte public key for identity hiding.
+ * key_material: 32-byte DH shared secret (unique per handshake — zero IV is safe).
+ * out: DH_PUBKEY_LEN + CRYPTO_TAG_LEN = 48 bytes. */
+static int encrypt_identity(const unsigned char *key_material,
+                             const unsigned char *pub, unsigned char *out) {
+    unsigned char key[CRYPTO_KEY_LEN];
+    SHA256(key_material, DH_PUBKEY_LEN, key);
+    unsigned char iv[CRYPTO_IV_LEN] = {0};
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) return -1;
+    int len;
+    if (EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, key, iv) != 1) goto err;
+    if (EVP_EncryptUpdate(ctx, out, &len, pub, DH_PUBKEY_LEN) != 1) goto err;
+    if (EVP_EncryptFinal_ex(ctx, out + len, &len) != 1) goto err;
+    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, CRYPTO_TAG_LEN,
+                             out + DH_PUBKEY_LEN) != 1) goto err;
+    EVP_CIPHER_CTX_free(ctx);
+    return 0;
+err:
+    EVP_CIPHER_CTX_free(ctx);
+    return -1;
+}
+
+/* Decrypt a 48-byte encrypted public key. Returns 0 on success, -1 on auth failure. */
+static int decrypt_identity(const unsigned char *key_material,
+                             const unsigned char *in, unsigned char *pub_out) {
+    unsigned char key[CRYPTO_KEY_LEN];
+    SHA256(key_material, DH_PUBKEY_LEN, key);
+    unsigned char iv[CRYPTO_IV_LEN] = {0};
+    unsigned char tag[CRYPTO_TAG_LEN];
+    memcpy(tag, in + DH_PUBKEY_LEN, CRYPTO_TAG_LEN);
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) return -1;
+    int len;
+    if (EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, key, iv) != 1) goto err;
+    if (EVP_DecryptUpdate(ctx, pub_out, &len, in, DH_PUBKEY_LEN) != 1) goto err;
+    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, CRYPTO_TAG_LEN, tag) != 1) goto err;
+    if (EVP_DecryptFinal_ex(ctx, pub_out + len, &len) != 1) goto err;
+    EVP_CIPHER_CTX_free(ctx);
+    return 0;
+err:
+    EVP_CIPHER_CTX_free(ctx);
+    return -1;
+}
+
 int handshake_client(int sock_fd, struct sockaddr_in *server_addr,
                      const unsigned char *psk_key,
                      EVP_PKEY *static_key, const unsigned char *static_pub,
                      const unsigned char *server_static_pub,
                      unsigned char *session_key) {
+    if (!server_static_pub) {
+        LOG_ERROR("Server static public key required for identity hiding");
+        return -1;
+    }
+
     EVP_PKEY *eph_key = NULL;
     unsigned char eph_pub[DH_PUBKEY_LEN];
     if (generate_x25519_keypair(&eph_key, eph_pub) < 0) {
@@ -288,14 +338,30 @@ int handshake_client(int sock_fd, struct sockaddr_in *server_addr,
         return -1;
     }
 
-    /* [magic][eph_pub][static_pub][HMAC(psk, eph_pub||static_pub)?] */
-    unsigned char pkt[HEADER_SIZE + DH_PUBKEY_LEN * 2 + HMAC_LEN];
-    int pkt_len = HEADER_SIZE + DH_PUBKEY_LEN * 2;
+    /* ecdh_ec_ss = DH(eph_c, server_static) — also used as identity encryption key */
+    unsigned char ecdh_ec_ss[DH_PUBKEY_LEN];
+    if (x25519_shared_secret(eph_key, server_static_pub, ecdh_ec_ss) < 0) {
+        LOG_ERROR("X25519 key derivation failed");
+        EVP_PKEY_free(eph_key);
+        return -1;
+    }
+
+    /* Encrypt client static pub: AES-256-GCM(SHA-256(DH(eph_c, server_static)), static_pub) */
+    unsigned char enc_static[HS_ENCRYPTED_PUB_LEN];
+    if (encrypt_identity(ecdh_ec_ss, static_pub, enc_static) < 0) {
+        LOG_ERROR("Failed to encrypt client identity");
+        EVP_PKEY_free(eph_key);
+        return -1;
+    }
+
+    /* [magic][eph_pub][enc_static(48)][HMAC(psk, eph_pub||enc_static)]? */
+    unsigned char pkt[HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN + HMAC_LEN];
+    int pkt_len = HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN;
     memcpy(pkt, pkt_header, HEADER_SIZE);
     memcpy(pkt + HEADER_SIZE, eph_pub, DH_PUBKEY_LEN);
-    memcpy(pkt + HEADER_SIZE + DH_PUBKEY_LEN, static_pub, DH_PUBKEY_LEN);
+    memcpy(pkt + HEADER_SIZE + DH_PUBKEY_LEN, enc_static, HS_ENCRYPTED_PUB_LEN);
     if (psk_key) {
-        if (compute_hmac(psk_key, pkt + HEADER_SIZE, DH_PUBKEY_LEN * 2,
+        if (compute_hmac(psk_key, pkt + HEADER_SIZE, DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN,
                          pkt + pkt_len) < 0) {
             LOG_ERROR("HMAC computation failed");
             EVP_PKEY_free(eph_key);
@@ -310,9 +376,9 @@ int handshake_client(int sock_fd, struct sockaddr_in *server_addr,
         return -1;
     }
 
-    unsigned char resp[HEADER_SIZE + DH_PUBKEY_LEN * 2 + HMAC_LEN];
+    unsigned char resp[HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN + HMAC_LEN];
     ssize_t nr = recvfrom(sock_fd, resp, sizeof(resp), 0, NULL, NULL);
-    int expected = HEADER_SIZE + DH_PUBKEY_LEN * 2 + (psk_key ? HMAC_LEN : 0);
+    int expected = HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN + (psk_key ? HMAC_LEN : 0);
     if (nr != expected) {
         LOG_ERROR("Handshake response size mismatch: got %zd, expected %d", nr, expected);
         EVP_PKEY_free(eph_key);
@@ -324,35 +390,45 @@ int handshake_client(int sock_fd, struct sockaddr_in *server_addr,
         return -1;
     }
 
-    const unsigned char *server_eph_pub    = resp + HEADER_SIZE;
-    const unsigned char *server_static_pub_recv = resp + HEADER_SIZE + DH_PUBKEY_LEN;
+    const unsigned char *server_eph_pub      = resp + HEADER_SIZE;
+    const unsigned char *enc_server_static   = resp + HEADER_SIZE + DH_PUBKEY_LEN;
 
     if (psk_key) {
         unsigned char expected_hmac[HMAC_LEN];
-        if (compute_hmac(psk_key, resp + HEADER_SIZE, DH_PUBKEY_LEN * 2,
+        if (compute_hmac(psk_key, resp + HEADER_SIZE, DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN,
                          expected_hmac) < 0 ||
-            memcmp(resp + HEADER_SIZE + DH_PUBKEY_LEN * 2, expected_hmac, HMAC_LEN) != 0) {
+            memcmp(resp + HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN,
+                   expected_hmac, HMAC_LEN) != 0) {
             LOG_ERROR("Server handshake HMAC verification failed — possible MITM");
             EVP_PKEY_free(eph_key);
             return -1;
         }
     }
-    if (server_static_pub) {
-        if (memcmp(server_static_pub_recv, server_static_pub, DH_PUBKEY_LEN) != 0) {
-            LOG_ERROR("Server static public key mismatch — possible MITM");
-            EVP_PKEY_free(eph_key);
-            return -1;
-        }
-    } else {
-        LOG_WARN("No expected server public key set — server identity not verified (MITM-vulnerable)");
+
+    /* ecdh_eph = DH(eph_c, eph_s) — also used as server identity decryption key */
+    unsigned char ecdh_eph[DH_PUBKEY_LEN];
+    if (x25519_shared_secret(eph_key, server_eph_pub, ecdh_eph) < 0) {
+        LOG_ERROR("X25519 key derivation failed");
+        EVP_PKEY_free(eph_key);
+        return -1;
     }
 
-    unsigned char ecdh_eph[DH_PUBKEY_LEN];
+    /* Decrypt server static pub: AES-256-GCM(SHA-256(DH(eph_c, eph_s)), enc_server_static) */
+    unsigned char server_static_pub_recv[DH_PUBKEY_LEN];
+    if (decrypt_identity(ecdh_eph, enc_server_static, server_static_pub_recv) < 0) {
+        LOG_ERROR("Failed to decrypt server identity — possible MITM");
+        EVP_PKEY_free(eph_key);
+        return -1;
+    }
+
+    if (memcmp(server_static_pub_recv, server_static_pub, DH_PUBKEY_LEN) != 0) {
+        LOG_ERROR("Server static public key mismatch — possible MITM");
+        EVP_PKEY_free(eph_key);
+        return -1;
+    }
+
     unsigned char ecdh_sc_es[DH_PUBKEY_LEN];
-    unsigned char ecdh_ec_ss[DH_PUBKEY_LEN];
-    if (x25519_shared_secret(eph_key, server_eph_pub, ecdh_eph) < 0 ||
-        x25519_shared_secret(static_key, server_eph_pub, ecdh_sc_es) < 0 ||
-        x25519_shared_secret(eph_key, server_static_pub_recv, ecdh_ec_ss) < 0) {
+    if (x25519_shared_secret(static_key, server_eph_pub, ecdh_sc_es) < 0) {
         LOG_ERROR("X25519 key derivation failed");
         EVP_PKEY_free(eph_key);
         return -1;
@@ -376,7 +452,7 @@ int handshake_server_respond(int sock_fd, const unsigned char *pkt, int pkt_len,
                              EVP_PKEY *static_key, const unsigned char *static_pub,
                              unsigned char *client_static_pub_out,
                              unsigned char *session_key) {
-    int expected = HEADER_SIZE + DH_PUBKEY_LEN * 2 + (psk_key ? HMAC_LEN : 0);
+    int expected = HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN + (psk_key ? HMAC_LEN : 0);
     if (pkt_len != expected) {
         LOG_ERROR("Client handshake size mismatch: got %d, expected %d", pkt_len, expected);
         return -1;
@@ -386,19 +462,32 @@ int handshake_server_respond(int sock_fd, const unsigned char *pkt, int pkt_len,
         return -1;
     }
 
-    const unsigned char *client_eph_pub    = pkt + HEADER_SIZE;
-    const unsigned char *client_static_pub = pkt + HEADER_SIZE + DH_PUBKEY_LEN;
+    const unsigned char *client_eph_pub  = pkt + HEADER_SIZE;
+    const unsigned char *enc_client_static = pkt + HEADER_SIZE + DH_PUBKEY_LEN;
 
     if (psk_key) {
         unsigned char expected_hmac[HMAC_LEN];
-        if (compute_hmac(psk_key, pkt + HEADER_SIZE, DH_PUBKEY_LEN * 2,
+        if (compute_hmac(psk_key, pkt + HEADER_SIZE, DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN,
                          expected_hmac) < 0 ||
-            memcmp(pkt + HEADER_SIZE + DH_PUBKEY_LEN * 2, expected_hmac, HMAC_LEN) != 0) {
+            memcmp(pkt + HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN,
+                   expected_hmac, HMAC_LEN) != 0) {
             LOG_ERROR("Client handshake HMAC verification failed — rejecting");
             return -1;
         }
     }
 
+    /* ecdh_ec_ss = DH(server_static, eph_c) — also decrypts client identity */
+    unsigned char ecdh_ec_ss[DH_PUBKEY_LEN];
+    if (x25519_shared_secret(static_key, client_eph_pub, ecdh_ec_ss) < 0) {
+        LOG_ERROR("X25519 key derivation failed");
+        return -1;
+    }
+
+    unsigned char client_static_pub[DH_PUBKEY_LEN];
+    if (decrypt_identity(ecdh_ec_ss, enc_client_static, client_static_pub) < 0) {
+        LOG_ERROR("Failed to decrypt client identity — invalid key or tampered packet");
+        return -1;
+    }
     memcpy(client_static_pub_out, client_static_pub, DH_PUBKEY_LEN);
 
     EVP_PKEY *eph_key = NULL;
@@ -408,13 +497,30 @@ int handshake_server_respond(int sock_fd, const unsigned char *pkt, int pkt_len,
         return -1;
     }
 
-    unsigned char resp[HEADER_SIZE + DH_PUBKEY_LEN * 2 + HMAC_LEN];
-    int resp_len = HEADER_SIZE + DH_PUBKEY_LEN * 2;
+    /* ecdh_eph = DH(eph_s, eph_c) — also encrypts server identity */
+    unsigned char ecdh_eph[DH_PUBKEY_LEN];
+    if (x25519_shared_secret(eph_key, client_eph_pub, ecdh_eph) < 0) {
+        LOG_ERROR("X25519 key derivation failed");
+        EVP_PKEY_free(eph_key);
+        return -1;
+    }
+
+    /* Encrypt server static pub: AES-256-GCM(SHA-256(DH(eph_s, eph_c)), static_pub) */
+    unsigned char enc_server_static[HS_ENCRYPTED_PUB_LEN];
+    if (encrypt_identity(ecdh_eph, static_pub, enc_server_static) < 0) {
+        LOG_ERROR("Failed to encrypt server identity");
+        EVP_PKEY_free(eph_key);
+        return -1;
+    }
+
+    /* [magic][eph_s_pub][enc_server_static(48)][HMAC(psk, eph_s_pub||enc_server_static)]? */
+    unsigned char resp[HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN + HMAC_LEN];
+    int resp_len = HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN;
     memcpy(resp, pkt_header, HEADER_SIZE);
     memcpy(resp + HEADER_SIZE, eph_pub, DH_PUBKEY_LEN);
-    memcpy(resp + HEADER_SIZE + DH_PUBKEY_LEN, static_pub, DH_PUBKEY_LEN);
+    memcpy(resp + HEADER_SIZE + DH_PUBKEY_LEN, enc_server_static, HS_ENCRYPTED_PUB_LEN);
     if (psk_key) {
-        if (compute_hmac(psk_key, resp + HEADER_SIZE, DH_PUBKEY_LEN * 2,
+        if (compute_hmac(psk_key, resp + HEADER_SIZE, DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN,
                          resp + resp_len) < 0) {
             LOG_ERROR("HMAC computation failed");
             EVP_PKEY_free(eph_key);
@@ -429,12 +535,8 @@ int handshake_server_respond(int sock_fd, const unsigned char *pkt, int pkt_len,
         return -1;
     }
 
-    unsigned char ecdh_eph[DH_PUBKEY_LEN];
     unsigned char ecdh_sc_es[DH_PUBKEY_LEN];
-    unsigned char ecdh_ec_ss[DH_PUBKEY_LEN];
-    if (x25519_shared_secret(eph_key, client_eph_pub, ecdh_eph) < 0 ||
-        x25519_shared_secret(eph_key, client_static_pub, ecdh_sc_es) < 0 ||
-        x25519_shared_secret(static_key, client_eph_pub, ecdh_ec_ss) < 0) {
+    if (x25519_shared_secret(eph_key, client_static_pub, ecdh_sc_es) < 0) {
         LOG_ERROR("X25519 key derivation failed");
         EVP_PKEY_free(eph_key);
         return -1;
