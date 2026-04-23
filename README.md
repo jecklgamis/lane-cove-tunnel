@@ -45,13 +45,35 @@ $ make clean      # remove binaries
 
 ### Architecture
 
+The same `peer` binary supports two topologies:
+
+**Hub-and-spoke (with relay)** — peers behind NAT connect outbound to a relay with a public IP. The relay forwards traffic between them.
+
 ```
 peer-a (10.9.0.2) ──┐
                      ├── UDP 5040 ── relay (10.9.0.1, public IP)
 peer-b (10.9.0.3) ──┘
 ```
 
-Peers behind NAT connect outbound to the relay. The relay forwards traffic between them. All three run the same `peer` binary.
+**Direct peer-to-peer (no relay)** — if at least one peer has a public IP (or both are on the same network), they can connect directly without a relay. The peer with the public IP omits `-E`; the other peer points `-E` at it.
+
+```
+peer-a (10.9.0.1, public IP) ──── UDP 5040 ──── peer-b (10.9.0.2)
+```
+
+```bash
+# peer-a — public IP, inbound only (no -E)
+$ PEER_IP=10.9.0.1/24 ./create-peer-tunnel.sh
+$ ./peer -i lanecove0 -K peer-a.key \
+    -P <peer-b-pubkey-hex> -R 10.9.0.2/32
+
+# peer-b — connects outbound to peer-a
+$ PEER_IP=10.9.0.2/24 ./create-peer-tunnel.sh
+$ ./peer -i lanecove0 -K peer-b.key \
+    -P <peer-a-pubkey-hex> -E <peer-a-ip>:5040 -R 10.9.0.1/32
+```
+
+If both peers have public IPs, both can set `-E` pointing at each other — they will race to initiate and converge on a shared session.
 
 ### Key Generation
 
@@ -74,12 +96,16 @@ Distribute public keys (`.crt` files only — never share `.key` files):
 # On the relay (VPS)
 $ ./run-relay-in-docker.sh
 
-# On peer-a (auto-detects host IP from en0/en1)
+# On peer-a — binds host UDP port 5041 to pin the NAT mapping
 $ RELAY_IP=<relay-public-ip> ./run-peer-a-in-docker.sh
 
-# On peer-b
+# On peer-b — binds host UDP port 5042
 $ RELAY_IP=<relay-public-ip> ./run-peer-b-in-docker.sh
 ```
+
+Override host ports with `PEER_A_HOST_PORT` / `PEER_B_HOST_PORT` if the defaults conflict with other services.
+
+> **Note (Docker Desktop on Mac):** Without pinned host ports, Docker Desktop's userspace NAT can remap the UDP source port between the handshake and subsequent data packets, causing the relay to drop traffic as "unknown peer".
 
 ### Testing
 
@@ -89,6 +115,9 @@ $ ./test-tunnel-using-peer-a.sh
 
 # From peer-b, ping/curl peer-a (10.9.0.2)
 $ ./test-tunnel-using-peer-b.sh
+
+# From peer-a, ping/curl the relay (10.9.0.1)
+$ ./test-tunnel-relay.sh
 
 # Shell into containers
 $ ./exec-shell-to-peer-a-container.sh
@@ -102,21 +131,23 @@ $ ./exec-shell-to-peer-b-container.sh
 $ ./generate-peer-keys.sh relay peer-a peer-b
 
 # Relay (public VPS) — inbound only, no -E flag
-$ ./create-peer-tunnel.sh   # PEER_IP=10.9.0.1/24
-$ ./peer -i lanecove0 -K relay.key \
-    -P <peer-a-pubkey-hex> -R 10.9.0.2/32 \
-    -P <peer-b-pubkey-hex> -R 10.9.0.3/32
+$ PEER_IP=10.9.0.1/24 ./create-peer-tunnel.sh
+$ ./run-relay.sh   # reads relay.key/crt + peer-a.crt + peer-b.crt
 
 # peer-a — connects outbound to relay
-$ ./create-peer-tunnel.sh   # PEER_IP=10.9.0.2/24
-$ ./peer -i lanecove0 -K peer-a.key \
-    -P <relay-pubkey-hex> -E <relay-ip>:5040 -R 10.9.0.0/24
+$ PEER_IP=10.9.0.2/24 ./create-peer-tunnel.sh
+$ PEER_KEY=peer-a.key PEER_IP=10.9.0.2/24 \
+  PEER_PUB_1=<relay-pubkey-hex> PEER_ENDPOINT_1=<relay-ip>:5040 PEER_ALLOWED_IPS_1=10.9.0.0/24 \
+  ./run-peer.sh
 
 # peer-b — connects outbound to relay
-$ ./create-peer-tunnel.sh   # PEER_IP=10.9.0.3/24
-$ ./peer -i lanecove0 -K peer-b.key \
-    -P <relay-pubkey-hex> -E <relay-ip>:5040 -R 10.9.0.0/24
+$ PEER_IP=10.9.0.3/24 ./create-peer-tunnel.sh
+$ PEER_KEY=peer-b.key PEER_IP=10.9.0.3/24 \
+  PEER_PUB_1=<relay-pubkey-hex> PEER_ENDPOINT_1=<relay-ip>:5040 PEER_ALLOWED_IPS_1=10.9.0.0/24 \
+  ./run-peer.sh
 ```
+
+`create-peer-tunnel.sh` creates the TUN interface, assigns the overlay IP, disables ICMP redirects, and marks the interface unmanaged in NetworkManager.
 
 Extract a peer's public key hex from its `.crt` file:
 ```bash
