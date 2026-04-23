@@ -91,11 +91,12 @@ docker run --privileged -it lane-cove-tunnel-udp-client:latest /bin/bash
 
 ## Docker
 - `Dockerfile.server` — server image; copies `server.key`, `server.crt`, `client.crt` into the image
-- `Dockerfile.client` — two-stage build: compiles client in `envoyproxy/envoy:v1.35-latest`, runs in the same base with Envoy, curl, and network tools; copies `client.key`, `client.crt`, `server.crt` into the image
+- `Dockerfile.client` — two-stage build: compiles client in `envoyproxy/envoy:v1.35-latest`, runs in same base with Envoy, curl, and network tools; copies `client.key`, `client.crt`, `server.crt` into the image
 - `docker-entrypoint-server.sh` — extracts client public key from `client.crt`, creates tunnel, starts nginx, starts server
-- `docker-entrypoint-client.sh` — creates tunnel, starts Envoy proxy (port 15040 → 10.10.0.1:80), starts client with server cert pinning
+- `docker-entrypoint-client.sh` — creates tunnel, starts Envoy proxy in background, starts tunnel client in foreground
 - `run-server-in-docker.sh` — builds server image and runs container, exposes UDP port
-- `run-client-in-docker.sh` — builds client image and runs container, auto-detects host IP from en0/en1
+- `run-client-in-docker.sh` — builds client image and runs container, exposes port 15040 (Envoy), auto-detects host IP from en0/en1
+- `envoy-client.yaml` — Envoy static config: TCP listener on `0.0.0.0:15040` proxying to `10.10.0.1:80`; admin on `127.0.0.1:9901`
 
 ## CLI Options
 

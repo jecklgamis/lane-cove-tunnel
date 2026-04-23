@@ -223,6 +223,36 @@ sudo apt install tshark
 sudo tshark -i lanecove.0
 ```
 
+## Envoy Proxy (Client Container)
+
+The client Docker image includes an [Envoy](https://www.envoyproxy.io/) sidecar proxy that starts automatically alongside the tunnel client.
+
+| Detail | Value |
+|--------|-------|
+| Image  | `envoyproxy/envoy:v1.35-latest` |
+| Listener | `0.0.0.0:15040` (TCP) |
+| Upstream | `10.10.0.1:80` (server overlay — nginx) |
+| Admin API | `127.0.0.1:9901` |
+| Config | `envoy-client.yaml` → `/etc/envoy/envoy.yaml` in container |
+
+Port 15040 is exposed on the host via `-p 15040:15040` in `run-client-in-docker.sh`. Traffic arriving on port 15040 is proxied over the encrypted tunnel to the nginx server on the server side.
+
+```
+Host:15040  →  Envoy(client container)  →  tunnel (AES-256-GCM/UDP)  →  10.10.0.1:80
+```
+
+To test once the tunnel is up:
+```
+curl http://localhost:15040          # via Envoy proxy through the tunnel
+curl http://10.10.0.1                # direct through the tunnel interface
+```
+
+To inspect Envoy stats and config:
+```
+curl http://localhost:9901/stats
+curl http://localhost:9901/config_dump
+```
+
 ## Verifying
 Ping a machine in the remote network, or `curl` the nginx server running on the server container:
 ```
