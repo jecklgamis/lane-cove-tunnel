@@ -12,9 +12,11 @@ static_resources:
           "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
           stat_prefix: tcp_proxy
           cluster: upstream
+          idle_timeout: 3600s
   clusters:
   - name: upstream
     type: STATIC
+    connect_timeout: 10s
     load_assignment:
       cluster_name: upstream
       endpoints:
