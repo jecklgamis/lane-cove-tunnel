@@ -3,6 +3,7 @@ TUNNEL_NAME=${TUNNEL_NAME:-lanecove0}
 PEER_PORT=${PEER_PORT:-5040}
 PEER_IP=${PEER_IP:-10.9.0.1/24}
 PEER_ROUTES=${PEER_ROUTES:-}
+PEER_KEY=${PEER_KEY:-peer.key}
 
 PEER_ARGS=()
 i=1
@@ -27,7 +28,7 @@ if [[ ${#PEER_ARGS[@]} -eq 0 ]]; then
     exit 1
 fi
 
-PEER_KEY=${PEER_KEY:-relay.key}
+
 
 export PEER_IP PEER_ROUTES
 ./peer -i "${TUNNEL_NAME}" -p "${PEER_PORT}" -K ${PEER_KEY} "${PEER_ARGS[@]}" -v
