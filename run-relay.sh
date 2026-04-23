@@ -27,7 +27,7 @@ if [[ ${#PEER_ARGS[@]} -eq 0 ]]; then
     exit 1
 fi
 
-PEER_KEY=${PEER_KEY:-peer.key}
+PEER_KEY=${PEER_KEY:-relay.key}
 
 export PEER_IP PEER_ROUTES
 ./peer -i "${TUNNEL_NAME}" -p "${PEER_PORT}" -K ${PEER_KEY} "${PEER_ARGS[@]}" -v
