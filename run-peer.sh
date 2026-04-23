@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 TUNNEL_NAME=${TUNNEL_NAME:-lanecove0}
 PEER_PORT=${PEER_PORT:-5040}
-PEER_IP=${PEER_IP:-10.9.0.1/24}
 PEER_ROUTES=${PEER_ROUTES:-}
 PEER_KEY=${PEER_KEY:-peer.key}
 
@@ -30,5 +29,5 @@ fi
 
 
 
-export PEER_IP PEER_ROUTES
+export PEER_ROUTES
 ./peer -i "${TUNNEL_NAME}" -p "${PEER_PORT}" -K ${PEER_KEY} "${PEER_ARGS[@]}" -v
