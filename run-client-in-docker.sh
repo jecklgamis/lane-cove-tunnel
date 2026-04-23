@@ -12,4 +12,5 @@ docker run \
   -e SERVER_IP="${SERVER_IP}" \
   -e SERVER_PORT="${SERVER_PORT}" \
   --add-host="host.docker.internal:host-gateway" \
+  -p 15040:15040 \
   -it lane-cove-tunnel-udp-client:latest
