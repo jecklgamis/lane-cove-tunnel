@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 COPY ${KEY_FILE} peer.key
 COPY ${CRT_FILE} peer.crt
+COPY nginx-keepalive.conf /etc/nginx/conf.d/keepalive.conf
 COPY docker-entrypoint-peer.sh create-peer-tunnel.sh envoy.yaml.tmpl index.html.tmpl ./
 COPY --from=builder /app/peer ./
 
