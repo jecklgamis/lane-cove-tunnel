@@ -41,20 +41,6 @@ $ make all        # build server, client, and peer binaries
 $ make clean      # remove binaries
 ```
 
-## Modes
-
-This project has two modes:
-
-### 1. Peer Mode (recommended)
-
-A symmetric peer model where every node runs the same `peer` binary. Any peer can initiate or accept connections. A relay peer with a public IP acts as a transit node for peers behind NAT.
-
-### 2. Server/Client Mode (classic)
-
-The original asymmetric model — a dedicated server accepts connections from clients. See [Server/Client Setup](#serverlient-setup) below.
-
----
-
 ## Peer Mode Setup
 
 ### Architecture
