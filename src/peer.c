@@ -3,6 +3,7 @@
 
 #define REKEY_AFTER_SECS          180
 #define REKEY_INITIATE_SECS       144   /* start rekeying at 80% of interval */
+#define PREV_KEY_GRACE_SECS         5
 #define HANDSHAKE_COOLDOWN_SECS     5
 #define HANDSHAKE_TIMEOUT_SECS      5
 #define RECONNECT_INTERVAL_SECS    30
@@ -31,6 +32,9 @@ typedef struct {
     struct sockaddr_in addr;
     unsigned char      static_pub[DH_PUBKEY_LEN];
     unsigned char      session_key[CRYPTO_KEY_LEN];
+    unsigned char      prev_session_key[CRYPTO_KEY_LEN];
+    int                prev_key_active;
+    time_t             prev_key_expires;
     time_t             last_seen;
     time_t             last_handshake;
     time_t             rekey_deadline;
@@ -146,6 +150,13 @@ static void session_init(peer_session_t *s, struct sockaddr_in *addr,
     s->active = 1;
     s->addr = *addr;
     memcpy(s->static_pub, pub, DH_PUBKEY_LEN);
+    if (was_active) {
+        memcpy(s->prev_session_key, s->session_key, CRYPTO_KEY_LEN);
+        s->prev_key_active = 1;
+        s->prev_key_expires = time(NULL) + PREV_KEY_GRACE_SECS;
+    } else {
+        s->prev_key_active = 0;
+    }
     memcpy(s->session_key, key, CRYPTO_KEY_LEN);
     s->last_seen = 0;
     s->last_handshake = time(NULL);
@@ -444,7 +455,15 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
             }
             s->last_seen = now;
             int plain_len;
-            if (decrypt_packet(s->session_key, wire_buf, (int)nr, plain_buf, &plain_len) < 0) {
+            int dec_ok = 0;
+            if (decrypt_packet(s->session_key, wire_buf, (int)nr, plain_buf, &plain_len) == 0) {
+                dec_ok = 1;
+                s->prev_key_active = 0;
+            } else if (s->prev_key_active && now <= s->prev_key_expires) {
+                if (decrypt_packet(s->prev_session_key, wire_buf, (int)nr, plain_buf, &plain_len) == 0)
+                    dec_ok = 1;
+            }
+            if (!dec_ok) {
                 LOG_WARN("Decrypt failed from %s:%d — dropping",
                          inet_ntoa(s->addr.sin_addr), ntohs(s->addr.sin_port));
                 continue;
