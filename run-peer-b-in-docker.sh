@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-set -e
+set -a
 # peerB: connects outbound to the relay, overlay IP 10.9.0.3.
 # Required key files: peer-b.key, peer-b.crt, relay.crt
 # Required env vars:
 #   RELAY_IP     — public IP of the relay
 # Optional env vars:
-#   TUNNEL_NAME  (default: lanecove.0)
+#   TUNNEL_NAME  (default: lanecove0)
 #   PEER_PORT    (default: 5040)
 #   RELAY_PORT   (default: 5040)
 #   PEER_B_KEY   (default: peer-b.key)
 #   PEER_B_CRT   (default: peer-b.crt)
 #   RELAY_CRT    (default: relay.crt)
 
-TUNNEL_NAME=${TUNNEL_NAME:-lanecove.0}
+TUNNEL_NAME=${TUNNEL_NAME:-lanecove0}
 PEER_PORT=${PEER_PORT:-5040}
 RELAY_IP=${RELAY_IP:-$(ipconfig getifaddr en0)}
 RELAY_IP=${RELAY_IP:-$(ipconfig getifaddr en1)}
@@ -37,9 +37,12 @@ docker build -f Dockerfile.peer \
   --build-arg CRT_FILE="${PEER_B_CRT}" \
   -t lane-cove-tunnel-peer-b:latest .
 
+PEER_B_HOST_PORT=${PEER_B_HOST_PORT:-5041}
+
 docker run \
   --cap-add=NET_ADMIN \
   --device=/dev/net/tun \
+  -p "${PEER_B_HOST_PORT}:${PEER_PORT}/udp" \
   -e TUNNEL_NAME="${TUNNEL_NAME}" \
   -e PEER_PORT="${PEER_PORT}" \
   -e PEER_IP="10.9.0.3/24" \

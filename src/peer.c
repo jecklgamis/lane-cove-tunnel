@@ -450,7 +450,7 @@ static void usage(void) {
     fprintf(stderr, "   -v  verbose\n");
     fprintf(stderr, "   -h  help\n");
     fprintf(stderr,
-            "Example: %s -i lanecove.0 -K peer.key "
+            "Example: %s -i lanecove0 -K peer.key "
             "-P <pubB> -E 1.2.3.4:5040 -R 10.9.0.2/32 "
             "-P <pubC> -R 10.9.0.3/32\n", program_name);
     exit(1);

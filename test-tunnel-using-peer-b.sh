@@ -7,6 +7,6 @@ fi
 TARGET_IP=${TARGET_IP:-10.9.0.2}
 echo "Using container: $CONTAINER_ID"
 echo "Pinging $TARGET_IP via tunnel..."
-docker exec -it "$CONTAINER_ID" ping -c 4 "$TARGET_IP"
+docker exec -it "$CONTAINER_ID" ping -c 2 "$TARGET_IP"
 echo "Curling http://$TARGET_IP via tunnel..."
 docker exec -it "$CONTAINER_ID" curl -s --max-time 5 "http://$TARGET_IP"

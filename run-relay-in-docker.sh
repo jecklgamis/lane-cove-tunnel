@@ -3,14 +3,14 @@ set -e
 # Relay peer: inbound-only, routes between peerA and peerB.
 # Required key files: relay.key, relay.crt, peer-a.crt, peer-b.crt
 # Optional env vars:
-#   TUNNEL_NAME  (default: lanecove.0)
+#   TUNNEL_NAME  (default: lanecove0)
 #   PEER_PORT    (default: 5040)
 #   RELAY_KEY    (default: relay.key)
 #   RELAY_CRT    (default: relay.crt)
 #   PEER_A_CRT   (default: peer-a.crt)
 #   PEER_B_CRT   (default: peer-b.crt)
 
-TUNNEL_NAME=${TUNNEL_NAME:-lanecove.0}
+TUNNEL_NAME=${TUNNEL_NAME:-lanecove0}
 PEER_PORT=${PEER_PORT:-5040}
 RELAY_KEY=${RELAY_KEY:-relay.key}
 RELAY_CRT=${RELAY_CRT:-relay.crt}

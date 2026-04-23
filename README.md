@@ -103,18 +103,18 @@ $ ./generate-peer-keys.sh relay peer-a peer-b
 
 # Relay (public VPS) — inbound only, no -E flag
 $ ./create-peer-tunnel.sh   # PEER_IP=10.9.0.1/24
-$ ./peer -i lanecove.0 -K relay.key \
+$ ./peer -i lanecove0 -K relay.key \
     -P <peer-a-pubkey-hex> -R 10.9.0.2/32 \
     -P <peer-b-pubkey-hex> -R 10.9.0.3/32
 
 # peer-a — connects outbound to relay
 $ ./create-peer-tunnel.sh   # PEER_IP=10.9.0.2/24
-$ ./peer -i lanecove.0 -K peer-a.key \
+$ ./peer -i lanecove0 -K peer-a.key \
     -P <relay-pubkey-hex> -E <relay-ip>:5040 -R 10.9.0.0/24
 
 # peer-b — connects outbound to relay
 $ ./create-peer-tunnel.sh   # PEER_IP=10.9.0.3/24
-$ ./peer -i lanecove.0 -K peer-b.key \
+$ ./peer -i lanecove0 -K peer-b.key \
     -P <relay-pubkey-hex> -E <relay-ip>:5040 -R 10.9.0.0/24
 ```
 
@@ -144,7 +144,7 @@ peer -i <iface> [-p <port>] [-K <keyfile>] -P <pubkey_hex> [-E <ip:port>] [-R <c
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TUNNEL_NAME` | `lanecove.0` | TUN interface name |
+| `TUNNEL_NAME` | `lanecove0` | TUN interface name |
 | `PEER_PORT` | `5040` | Listen port |
 | `PEER_IP` | `10.9.0.1/24` | This peer's overlay IP |
 | `PEER_ROUTES` | _(none)_ | Space-separated CIDRs to route via TUN |
@@ -179,12 +179,12 @@ The client auto-detects the host IP from `en0` (falling back to `en1`) on Mac.
 
 ```bash
 # Server
-$ ./create-server-tunnel.sh   # creates lanecove.0 at 10.10.0.1/24
-$ ./server -i lanecove.0 -p 5040 -K server.key -A <client-pubkey-hex> -R 10.9.0.0/24
+$ ./create-server-tunnel.sh   # creates lanecove0 at 10.10.0.1/24
+$ ./server -i lanecove0 -p 5040 -K server.key -A <client-pubkey-hex> -R 10.9.0.0/24
 
 # Client
-$ ./create-client-tunnel.sh   # creates lanecove.0 at 10.9.0.1/24
-$ ./client -i lanecove.0 -s <server-ip> -p 5040 -K client.key -C server.crt
+$ ./create-client-tunnel.sh   # creates lanecove0 at 10.9.0.1/24
+$ ./client -i lanecove0 -s <server-ip> -p 5040 -K client.key -C server.crt
 ```
 
 ### Multiple Clients
@@ -275,7 +275,7 @@ Each session uses a per-direction 64-bit sequence counter. The receiver maintain
 ## Monitoring Tunnel Traffic
 ```
 sudo apt install tshark
-sudo tshark -i lanecove.0
+sudo tshark -i lanecove0
 ```
 
 ## References

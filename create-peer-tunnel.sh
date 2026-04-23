@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-TUNNEL_NAME=${TUNNEL_NAME:-lanecove.0}
+TUNNEL_NAME=${TUNNEL_NAME:-lanecove0}
 PEER_IP=${PEER_IP:-10.9.0.1/24}
 PEER_ROUTES=${PEER_ROUTES:-}
 
@@ -11,3 +11,5 @@ ip addr add "$PEER_IP" dev "$TUNNEL_NAME"
 for route in $PEER_ROUTES; do
     ip route add "$route" via "${PEER_IP%/*}"
 done
+sysctl -w net.ipv4.conf.all.send_redirects=0 >/dev/null
+echo 0 > "/proc/sys/net/ipv4/conf/${TUNNEL_NAME}/send_redirects" 2>/dev/null || true

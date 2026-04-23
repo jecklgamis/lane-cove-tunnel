@@ -120,13 +120,13 @@ peer -i <iface> [-p <port>] [-K <keyfile>] -P <pubkey_hex> [-E <ip:port>] [-R <c
 | `-v`   | Verbose / debug logging |
 
 ## Tunnel Interface
-- Interface name: `lanecove.0`
+- Interface name: `lanecove0`
 - Overlay network: `10.9.0.0/24` (relay=`10.9.0.1`, peer-a=`10.9.0.2`, peer-b=`10.9.0.3`)
 
 ## Key Environment Variables
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TUNNEL_NAME` | `lanecove.0` | TUN interface name |
+| `TUNNEL_NAME` | `lanecove0` | TUN interface name |
 | `PEER_PORT` | `5040` | Listen port |
 | `PEER_IP` | `10.9.0.1/24` | This peer's overlay IP |
 | `PEER_ROUTES` | _(none)_ | Space-separated CIDRs to route via TUN |
