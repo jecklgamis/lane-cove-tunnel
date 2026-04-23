@@ -12,7 +12,7 @@ ARG KEY_FILE=peer.key
 ARG CRT_FILE=peer.crt
 
 RUN apt-get update && apt-get install -y \
-    iproute2 libssl3 curl iputils-ping procps nginx net-tools \
+    iproute2 libssl3 curl iputils-ping procps nginx net-tools openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
