@@ -19,6 +19,6 @@ for route in $PEER_ROUTES; do
 done
 log "Disabling send_redirects"
 sysctl -w net.ipv4.conf.all.send_redirects=0 >/dev/null 2>&1 || true
-echo 0 > "/proc/sys/net/ipv4/conf/${TUNNEL_NAME}/send_redirects" 2>/dev/null || true
+sysctl -w "net.ipv4.conf.${TUNNEL_NAME}.send_redirects=0" >/dev/null 2>&1 || true
 nmcli device set "$TUNNEL_NAME" managed no 2>/dev/null || true
 log "Tunnel $TUNNEL_NAME ready"
