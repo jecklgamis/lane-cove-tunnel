@@ -29,6 +29,7 @@ fi
 
 export PEER_IP PEER_ROUTES
 ./create-peer-tunnel.sh
+envsubst < index.html.tmpl > /var/www/html/index.html
 nginx
 if [[ -n "${ENVOY_UPSTREAM_HOST:-}" ]]; then
     ENVOY_UPSTREAM_PORT=${ENVOY_UPSTREAM_PORT:-80}
