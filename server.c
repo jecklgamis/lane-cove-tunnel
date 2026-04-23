@@ -422,7 +422,7 @@ void usage() {
     fprintf(stderr, "   -k  pre-shared key for handshake authentication\n");
     fprintf(stderr, "   -v  verbose\n");
     fprintf(stderr, "   -h  print this help message\n");
-    fprintf(stderr, "Example : %s -i lanecove-udp -p 5040 -K server.key -A <pubkey> -R 10.9.0.0/24 -k mysecret\n",
+    fprintf(stderr, "Example : %s -i lanecove.0 -p 5040 -K server.key -A <pubkey> -R 10.9.0.0/24 -k mysecret\n",
             program_name);
     exit(1);
 }

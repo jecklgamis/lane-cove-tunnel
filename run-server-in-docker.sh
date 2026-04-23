@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -ex
-TUNNEL_NAME=${TUNNEL_NAME:-lanecove-udp}
+TUNNEL_NAME=${TUNNEL_NAME:-lanecove.0}
 SERVER_PORT=${SERVER_PORT:-5040}
 docker build -f Dockerfile.server -t lane-cove-tunnel-udp-server:latest .
 docker run \

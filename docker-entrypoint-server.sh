@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-TUNNEL_NAME=${TUNNEL_NAME:-lanecove-udp}
+TUNNEL_NAME=${TUNNEL_NAME:-lanecove.0}
 SERVER_PORT=${SERVER_PORT:-5040}
 ALLOWED_IPS=${ALLOWED_IPS:-10.9.0.0/24}
 

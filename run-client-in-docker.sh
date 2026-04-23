@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-TUNNEL_NAME=${TUNNEL_NAME:-lanecove-udp}
+TUNNEL_NAME=${TUNNEL_NAME:-lanecove.0}
 SERVER_IP=${SERVER_IP:-$(ipconfig getifaddr en0)}
 SERVER_IP=${SERVER_IP:-$(ipconfig getifaddr en1)}
 SERVER_PORT=${SERVER_PORT:-5040}

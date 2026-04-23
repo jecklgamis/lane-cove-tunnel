@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-TUNNEL_NAME=${TUNNEL_NAME:-lanecove-udp}
+TUNNEL_NAME=${TUNNEL_NAME:-lanecove.0}
 SERVER_IP=${SERVER_IP:-some-remote-ip}
 SERVER_PORT=${SERVER_PORT:-5040}
 ./create-client-tunnel.sh

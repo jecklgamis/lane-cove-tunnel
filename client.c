@@ -191,7 +191,7 @@ void usage() {
     fprintf(stderr, "   -E  server public key (hex) — overrides -C\n");
     fprintf(stderr, "   -v  verbose\n");
     fprintf(stderr, "   -h  print this help message\n");
-    fprintf(stderr, "Example : %s -i lanecove-udp -s 10.10.0.1 -p 5040 -k mysecret -K client.key -C server.crt\n", program_name);
+    fprintf(stderr, "Example : %s -i lanecove.0 -s 10.10.0.1 -p 5040 -k mysecret -K client.key -C server.crt\n", program_name);
     exit(1);
 }
 

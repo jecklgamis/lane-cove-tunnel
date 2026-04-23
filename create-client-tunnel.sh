@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-TUNNEL_NAME=${TUNNEL_NAME:-lanecove-udp}
+TUNNEL_NAME=${TUNNEL_NAME:-lanecove.0}
 IP_ADDRESS="10.9.0.1/24"
 REMOTE_SUBNET="10.10.0.0/24"
 

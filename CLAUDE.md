@@ -127,14 +127,14 @@ client -i <iface> -s <server-ip> -C <server-cert> [-p <port>] [-k <psk>] [-K <ke
 | `-v`   | Verbose / debug logging |
 
 ## Tunnel Interface
-- Interface name: `lanecove-udp`
+- Interface name: `lanecove.0`
 - Server overlay network: `10.10.0.0/24` (fixed at `10.10.0.1/24`)
 - Client overlay network: `10.9.0.0/24` (fixed at `10.9.0.1/24`)
 
 ## Key Environment Variables
 | Variable       | Default        | Description                  |
 |----------------|----------------|------------------------------|
-| `TUNNEL_NAME`  | `lanecove-udp` | TUN interface name           |
+| `TUNNEL_NAME`  | `lanecove.0` | TUN interface name           |
 | `SERVER_PORT`  | `5040`         | Tunnel port                  |
 | `SERVER_IP`    | (auto)         | Server IP (client only)      |
 | `ALLOWED_IPS`  | `10.9.0.0/24`  | Client AllowedIPs (server entrypoint) |

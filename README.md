@@ -63,11 +63,11 @@ The script prompts before overwriting existing files.
 * Local network : 10.9.0.0/24
 * Remote network : 10.10.0.0/24
 * Local machine :
-  * Adds `lanecove-udp` virtual interface (`10.9.0.1/24`)
+  * Adds `lanecove.0` virtual interface (`10.9.0.1/24`)
   * Adds route to `10.10.0.0/24` network via `10.9.0.1`
   * Runs the client and connects to the remote server on port 5040
 * Remote machine :
-  * Adds `lanecove-udp` virtual interface (`10.10.0.1/24`)
+  * Adds `lanecove.0` virtual interface (`10.10.0.1/24`)
   * Adds route to `10.9.0.0/24` network via `10.10.0.1`
   * Runs the server on port 5040
 
@@ -86,24 +86,24 @@ The client auto-detects the host IP from `en0` (falling back to `en1`) on Mac.
 
 * Create the tunnel:
 ```
-$ ./create-server-tunnel.sh   # creates lanecove-udp at 10.10.0.1/24
+$ ./create-server-tunnel.sh   # creates lanecove.0 at 10.10.0.1/24
 ```
 
 * Run the server binary directly:
 ```
-$ ./server -i lanecove-udp -p 5040 -K server.key -A <client-pubkey-hex> -R 10.9.0.0/24 -k mysecret
+$ ./server -i lanecove.0 -p 5040 -K server.key -A <client-pubkey-hex> -R 10.9.0.0/24 -k mysecret
 ```
 
 ### Running The Client
 
 * Create the tunnel:
 ```
-$ ./create-client-tunnel.sh   # creates lanecove-udp, 10.9.0.1/24
+$ ./create-client-tunnel.sh   # creates lanecove.0, 10.9.0.1/24
 ```
 
 * Run the client binary directly:
 ```
-$ ./client -i lanecove-udp -s <server-ip> -p 5040 -K client.key -C server.crt -k mysecret
+$ ./client -i lanecove.0 -s <server-ip> -p 5040 -K client.key -C server.crt -k mysecret
 ```
 
 The client public key hex can be extracted from `client.crt`:
@@ -211,19 +211,19 @@ The `create-xxx-tunnel.sh` scripts add routing table entries automatically.
 Local machine:
 ```
 $ ip route show
-10.10.0.0/24 via 10.9.0.1 dev lanecove-udp
+10.10.0.0/24 via 10.9.0.1 dev lanecove.0
 ```
 
 Remote machine:
 ```
 $ ip route show
-10.9.0.0/24 via 10.10.0.1 dev lanecove-udp
+10.9.0.0/24 via 10.10.0.1 dev lanecove.0
 ```
 
 ## Monitoring Tunnel Traffic
 ```
 sudo apt install tshark
-sudo tshark -i lanecove-udp
+sudo tshark -i lanecove.0
 ```
 
 ## Verifying
