@@ -1,3 +1,5 @@
+FROM envoyproxy/envoy:latest AS envoy
+
 FROM gcc:latest
 
 RUN apt-get update && apt-get install -y iproute2 net-tools traceroute htop kmod iputils-ping tshark tcpdump libssl-dev && rm -rf /var/lib/apt/lists/*
@@ -5,6 +7,9 @@ RUN apt-get update && apt-get install -y iproute2 net-tools traceroute htop kmod
 WORKDIR /app
 COPY . .
 COPY client.key client.crt server.crt ./
+
+COPY --from=envoy /usr/local/bin/envoy /usr/local/bin/envoy
+COPY envoy-client.yaml /etc/envoy/envoy.yaml
 
 RUN make all
 ENTRYPOINT ["./docker-entrypoint-client.sh"]
