@@ -29,6 +29,8 @@ fi
 
 export PEER_IP PEER_ROUTES
 ./create-peer-tunnel.sh
+HOST_IP=$(hostname -I | awk '{print $1}')
+export HOST_IP
 envsubst < index.html.tmpl > /var/www/html/index.html
 nginx
 if [[ -n "${ENVOY_UPSTREAM_HOST:-}" ]]; then
