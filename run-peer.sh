@@ -27,7 +27,5 @@ if [[ ${#PEER_ARGS[@]} -eq 0 ]]; then
     exit 1
 fi
 
-
-
 export PEER_ROUTES
 ./peer -i "${TUNNEL_NAME}" -p "${PEER_PORT}" -K ${PEER_KEY} "${PEER_ARGS[@]}" -v
