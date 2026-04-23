@@ -95,8 +95,9 @@ RELAY_IP=<ip> ./run-peer-b-in-docker.sh
 ```
 
 ## Docker
-- `Dockerfile.peer` — multi-stage build (`debian:bookworm-slim`); accepts `KEY_FILE` and `CRT_FILE` build args; includes iproute2, nginx, curl, ping, ifconfig, ssh
-- `docker-entrypoint-peer.sh` — reads `PEER_PUB_n`/`PEER_ENDPOINT_n`/`PEER_ALLOWED_IPS_n` env vars, creates TUN, starts nginx, starts peer
+- `Dockerfile.peer` — multi-stage build (`debian:bookworm-slim`); accepts `KEY_FILE` and `CRT_FILE` build args; includes iproute2, nginx, curl, ping, ifconfig, ssh, Envoy proxy (~299 MB total)
+- `docker-entrypoint-peer.sh` — reads `PEER_PUB_n`/`PEER_ENDPOINT_n`/`PEER_ALLOWED_IPS_n` env vars, creates TUN, starts nginx, optionally starts Envoy TCP proxy (when `ENVOY_UPSTREAM_HOST` is set), starts peer
+- `envoy.yaml.tmpl` — Envoy static config template; TCP listener on `0.0.0.0:15040` proxying to `${ENVOY_UPSTREAM_HOST}:${ENVOY_UPSTREAM_PORT}`
 - `create-peer-tunnel.sh` — creates TUN interface using `PEER_IP` and `PEER_ROUTES`
 - `run-relay-in-docker.sh` — builds relay image (relay.key/crt), extracts peer-a/peer-b pubkeys, runs container
 - `run-peer-a-in-docker.sh` — builds peer-a image, auto-detects relay IP from en0/en1, runs container
@@ -133,6 +134,8 @@ peer -i <iface> [-p <port>] [-K <keyfile>] -P <pubkey_hex> [-E <ip:port>] [-R <c
 | `PEER_PUB_n` | — | Known peer public key hex |
 | `PEER_ENDPOINT_n` | — | Peer endpoint `ip:port` |
 | `PEER_ALLOWED_IPS_n` | — | AllowedIPs CIDR(s) for peer n |
+| `ENVOY_UPSTREAM_HOST` | — | Upstream host for Envoy TCP proxy; if unset, Envoy is not started |
+| `ENVOY_UPSTREAM_PORT` | `80` | Upstream port for Envoy TCP proxy |
 
 ## Platform Notes
 - Requires Linux kernel (uses `linux/if_tun.h` and `/dev/net/tun`)
