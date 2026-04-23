@@ -394,7 +394,7 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
                 }
             }
             ssize_t nw = write(tun_fd, payload, payload_len);
-            if (nw < 0) { LOG_ERROR("TUN write: %s", strerror(errno)); goto done; }
+            if (nw < 0) { LOG_WARN("TUN write: %s", strerror(errno)); continue; }
         }
     }
 done:

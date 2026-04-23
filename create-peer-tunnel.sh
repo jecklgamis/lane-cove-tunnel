@@ -11,5 +11,6 @@ ip addr add "$PEER_IP" dev "$TUNNEL_NAME"
 for route in $PEER_ROUTES; do
     ip route add "$route" via "${PEER_IP%/*}"
 done
-sysctl -w net.ipv4.conf.all.send_redirects=0 >/dev/null
+sysctl -w net.ipv4.conf.all.send_redirects=0 >/dev/null 2>&1 || true
 echo 0 > "/proc/sys/net/ipv4/conf/${TUNNEL_NAME}/send_redirects" 2>/dev/null || true
+nmcli device set "$TUNNEL_NAME" managed no 2>/dev/null || true
