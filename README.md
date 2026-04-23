@@ -54,14 +54,9 @@ $ ./generate-ssl-certs.sh
 The script prompts before overwriting existing files.
 
 ## Example Setup
-```
-10.9.0.0/24 network                                        10.10.0.0/24 network
-...                                                        ...
-[transport: segment/packet]   <---- tunnel using UDP --->  [transport: segment/packet]
-[network: ip packet]                                       [network: ip packet]
-[datalink: ethernet frame ]                                [datalink: ethernet frame ]
-[physical: bits]                                           [physical: bits]
-```
+
+![Architecture Diagram](diagram.png)
+
 * Local network : 10.9.0.0/24
 * Remote network : 10.10.0.0/24
 * Local machine :
