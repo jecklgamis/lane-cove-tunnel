@@ -1,0 +1,24 @@
+FROM debian:bookworm-slim AS builder
+
+RUN apt-get update && apt-get install -y gcc make libssl-dev && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY src/common.c src/common.h src/peer.c ./
+RUN gcc -o peer peer.c common.c -lssl -lcrypto
+
+FROM debian:bookworm-slim
+
+ARG KEY_FILE=peer.key
+ARG CRT_FILE=peer.crt
+
+RUN apt-get update && apt-get install -y \
+    iproute2 libssl3 curl iputils-ping procps nginx net-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY ${KEY_FILE} peer.key
+COPY ${CRT_FILE} peer.crt
+COPY docker-entrypoint-peer.sh create-peer-tunnel.sh ./
+COPY --from=builder /app/peer ./
+
+ENTRYPOINT ["./docker-entrypoint-peer.sh"]
