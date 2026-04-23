@@ -1,7 +1,31 @@
 ## lane-cove-tunnel
 
-A simple Linux IP tunnel using a TUN virtual interface over UDP. Implements a basic VPN for learning purposes.
+A simple Linux **layer 3 IP tunnel** using a TUN virtual interface over UDP. Implements a basic VPN for learning purposes.
 Warning: not for production use.
+
+Layer 3 means the tunnel operates at the IP (network) layer — it forwards raw IP packets between peers, not Ethernet frames. Each end of the tunnel has a TUN interface with an IP address, and routing rules direct traffic through it. Broadcast and non-IP traffic are not supported.
+
+## Features
+
+### Security
+- **X25519 Diffie-Hellman key exchange** — ephemeral + static key pairs for forward secrecy and mutual authentication
+- **AES-256-GCM encryption** — all tunnel traffic is authenticated and encrypted
+- **Identity hiding** — static public keys are encrypted inside the handshake; passive observers cannot identify peers
+- **Cert pinning** — client verifies the server's static public key before completing the handshake (`-C`)
+- **PSK authentication** — optional HMAC-SHA256 over the handshake using a pre-shared key (`-k`)
+- **Replay protection** — 2048-bit sliding window per session rejects replayed or reordered packets
+- **AllowedIPs routing** — server enforces a per-client IP allowlist; packets with unexpected source IPs are dropped
+- **Session rekeying** — client re-handshakes every 5 minutes, rotating the session key automatically
+- **DoS mitigations** — 5-second handshake cooldown per address and per public key; max-client cap for new peers only
+
+### Limitations
+- **Linux only** — uses `linux/if_tun.h` and `/dev/net/tun`; does not compile on macOS (use Docker)
+- **IPv4 only** — TUN packets are validated as IPv4; IPv6 and non-IP traffic are dropped
+- **UDP transport** — no packet ordering guarantees; packet loss is not retransmitted
+- **Single-threaded** — one epoll loop handles all I/O; not designed for high throughput
+- **No key rotation for long-lived servers** — server static key is loaded once at startup
+- **No certificate revocation** — removing a client requires a server restart with the key removed from `-A`
+- **Learning project** — not audited, not hardened for production use
 
 ## Requirements
 * Linux (tested using Ubuntu 22.04 LTS), gcc, make, iproute2, libssl-dev
