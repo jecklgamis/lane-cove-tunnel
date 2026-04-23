@@ -50,6 +50,7 @@ docker run \
   --device=/dev/net/tun \
   -p "${PEER_B_HOST_PORT}:${PEER_PORT}/udp" \
   -p "15043:15040" \
+  -p "15053:15050" \
   -p "9902:9901" \
   -e TUNNEL_NAME="${TUNNEL_NAME}" \
   -e ENVOY_UPSTREAM_HOST="${ENVOY_UPSTREAM_HOST}" \
