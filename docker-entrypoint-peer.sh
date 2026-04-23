@@ -30,4 +30,11 @@ fi
 export PEER_IP PEER_ROUTES
 ./create-peer-tunnel.sh
 nginx
+if [[ -n "${ENVOY_UPSTREAM_HOST:-}" ]]; then
+    ENVOY_UPSTREAM_PORT=${ENVOY_UPSTREAM_PORT:-80}
+    export ENVOY_UPSTREAM_HOST ENVOY_UPSTREAM_PORT
+    envsubst < envoy.yaml.tmpl > envoy.yaml
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO]  Starting Envoy: TCP listener 0.0.0.0:15040 -> ${ENVOY_UPSTREAM_HOST}:${ENVOY_UPSTREAM_PORT}"
+    envoy -c envoy.yaml --log-level error --log-path envoy.log &
+fi
 ./peer -i "${TUNNEL_NAME}" -p "${PEER_PORT}" -K peer.key "${PEER_ARGS[@]}" -v

@@ -11,6 +11,9 @@ set -a
 #   PEER_B_KEY   (default: peer-b.key)
 #   PEER_B_CRT   (default: peer-b.crt)
 #   RELAY_CRT    (default: relay.crt)
+#   ENVOY_HOST_PORT      (default: 15040)
+#   ENVOY_UPSTREAM_HOST  — upstream host for Envoy TCP proxy (required for Envoy)
+#   ENVOY_UPSTREAM_PORT  (default: 80)
 
 TUNNEL_NAME=${TUNNEL_NAME:-lanecove0}
 PEER_PORT=${PEER_PORT:-5040}
@@ -38,12 +41,17 @@ docker build -f Dockerfile.peer \
   -t lane-cove-tunnel-peer-b:latest .
 
 PEER_B_HOST_PORT=${PEER_B_HOST_PORT:-5043}
+ENVOY_HOST_PORT=${ENVOY_HOST_PORT:-15040}
+ENVOY_UPSTREAM_HOST=10.9.0.2
+ENVOY_UPSTREAM_PORT=${ENVOY_UPSTREAM_PORT:-80}
 
 docker run \
   --cap-add=NET_ADMIN \
   --device=/dev/net/tun \
   -p "${PEER_B_HOST_PORT}:${PEER_PORT}/udp" \
+  -p "15043:15040" \
   -e TUNNEL_NAME="${TUNNEL_NAME}" \
+  -e ENVOY_UPSTREAM_HOST="${ENVOY_UPSTREAM_HOST}" \
   -e PEER_PORT="${PEER_PORT}" \
   -e PEER_IP="10.9.0.3/24" \
   -e PEER_PUB_1="${RELAY_PUB}" \
