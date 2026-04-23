@@ -1,10 +1,20 @@
-FROM gcc:latest
+FROM debian:bookworm-slim AS builder
 
-RUN apt-get update && apt-get install -y iproute2 net-tools traceroute htop kmod nginx iputils-ping tshark tcpdump libssl-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y gcc make libssl-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY . .
-COPY server.key server.crt client.crt ./
+COPY common.c common.h rcunit_list.c rcunit_list.h server.c ./
+RUN gcc -o server server.c common.c rcunit_list.c -lssl -lcrypto
 
-RUN make all
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    nginx iproute2 openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY server.key server.crt client.crt ./
+COPY docker-entrypoint-server.sh create-server-tunnel.sh ./
+COPY --from=builder /app/server ./
+
 ENTRYPOINT ["./docker-entrypoint-server.sh"]

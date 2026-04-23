@@ -3,19 +3,19 @@ FROM envoyproxy/envoy:v1.35-latest AS builder
 RUN apt-get update && apt-get install -y gcc make libssl-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY . .
-RUN make all
+COPY common.c common.h client.c ./
+RUN gcc -o client client.c common.c -lssl -lcrypto
 
 FROM envoyproxy/envoy:v1.35-latest
 
 RUN apt-get update && apt-get install -y \
-    iproute2 net-tools traceroute htop kmod iputils-ping tshark tcpdump libssl-dev curl \
+    iproute2 libssl3 curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY . .
 COPY client.key client.crt server.crt ./
-COPY --from=builder /app/client /app/client
+COPY docker-entrypoint-client.sh create-client-tunnel.sh ./
 COPY envoy-client.yaml /etc/envoy/envoy.yaml
+COPY --from=builder /app/client ./
 
 ENTRYPOINT ["./docker-entrypoint-client.sh"]
