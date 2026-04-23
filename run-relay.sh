@@ -35,4 +35,5 @@ export PEER_PUB_2=$PEER_B_PUB
 export PEER_ALLOWED_IPS_1="10.9.0.2/32"
 export PEER_ALLOWED_IPS_2="10.9.0.3/32"
 
+export PEER_KEY=relay.key
 ./run-peer.sh
