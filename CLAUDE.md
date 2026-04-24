@@ -36,7 +36,11 @@ Keys are X25519 key pairs stored in PEM files. Use `generate-peer-keys.sh` to ge
 - Sessions are stored in a flat array (`sessions[]`, max 64)
 - Slot reuse: existing slot found by pub key first, then addr, then free slot
 - Outbound peers checked every 10 seconds; reconnect attempted every 30 seconds on failure
-- Handshake timeout: 5 seconds (blocking; other peers may miss packets during rekey)
+- Rekeying initiated at 80% of session lifetime (`REKEY_INITIATE_SECS=144`, `REKEY_AFTER_SECS=180`)
+- Handshake is **non-blocking** (async): initiation and response are split across epoll iterations
+- Simultaneous rekey collisions resolved by tie-breaking: higher public key wins
+- **Previous session key grace period** (`PREV_KEY_GRACE_SECS=5`): responder retains old key as decrypt fallback for 5 seconds after rekeying, eliminating packet loss during the initiator's response window
+- **Pre-generated ephemeral keypair**: responder pre-generates the next X25519 ephemeral keypair at startup and after each handshake, so keygen never blocks the event loop on the hot path
 
 ### Handshake Wire Format
 ```
@@ -97,7 +101,10 @@ RELAY_IP=<ip> ./run-peer-b-in-docker.sh
 ## Docker
 - `Dockerfile.peer` — multi-stage build (`debian:bookworm-slim`); accepts `KEY_FILE` and `CRT_FILE` build args; includes iproute2, nginx, curl, ping, ifconfig, ssh, Envoy proxy (~299 MB total)
 - `docker-entrypoint-peer.sh` — reads `PEER_PUB_n`/`PEER_ENDPOINT_n`/`PEER_ALLOWED_IPS_n` env vars, creates TUN, starts nginx, optionally starts Envoy (when `ENVOY_UPSTREAM_HOST` is set), starts peer
-- `envoy.yaml.tmpl` — Envoy static config template; TCP proxy listener on `0.0.0.0:15040` and HTTP proxy listener on `0.0.0.0:15050`, both proxying to `${ENVOY_UPSTREAM_HOST}:${ENVOY_UPSTREAM_PORT}`
+- `envoy.yaml.tmpl` — Envoy static config template; two listeners sharing one upstream cluster:
+  - **TCP proxy** on `0.0.0.0:15040` — transparent L4 pass-through, one upstream connection per downstream connection
+  - **HTTP proxy** on `0.0.0.0:15050` — L7 with upstream connection pooling (~130 requests/connection); eliminates per-request TCP handshake cost through the tunnel; recommended for HTTP workloads
+  - Admin interface on `0.0.0.0:9901`
 - `create-peer-tunnel.sh` — creates TUN interface using `PEER_IP` and `PEER_ROUTES`
 - `run-relay-in-docker.sh` — builds relay image (relay.key/crt), extracts peer-a/peer-b pubkeys, runs container
 - `run-peer-a-in-docker.sh` — builds peer-a image, auto-detects relay IP from en0/en1, runs container
@@ -134,11 +141,30 @@ peer -i <iface> [-p <port>] [-K <keyfile>] -P <pubkey_hex> [-E <ip:port>] [-R <c
 | `PEER_PUB_n` | — | Known peer public key hex |
 | `PEER_ENDPOINT_n` | — | Peer endpoint `ip:port` |
 | `PEER_ALLOWED_IPS_n` | — | AllowedIPs CIDR(s) for peer n |
-| `ENVOY_UPSTREAM_HOST` | — | Upstream host for Envoy TCP proxy; if unset, Envoy is not started |
-| `ENVOY_UPSTREAM_PORT` | `80` | Upstream port for Envoy TCP proxy |
+| `ENVOY_UPSTREAM_HOST` | — | Upstream host for Envoy proxy; if unset, Envoy is not started |
+| `ENVOY_UPSTREAM_PORT` | `80` | Upstream port for Envoy proxy |
 
 ## Platform Notes
 - Requires Linux kernel (uses `linux/if_tun.h` and `/dev/net/tun`)
 - Does not compile on macOS — use Docker for building and running
 - Docker containers require `--cap-add=NET_ADMIN` and `--device=/dev/net/tun`
 - Requires libssl-dev (OpenSSL) for AES-256-GCM and X25519
+
+## Performance Reference (Gatling, 4,800 requests @ ~10 rps, two-hop overlay)
+
+| Configuration | OK | p50 | p95 | p99 | Notes |
+|---|---|---|---|---|---|
+| TCP proxy, pre-fix | 51% | — | — | — | ~48% failure from rekey blackout |
+| TCP proxy + grace period | 100% | 404ms | 412ms | 431ms | p95 assertion (< 250ms) failed |
+| HTTP proxy (port 15050) | **100%** | **204ms** | **222ms** | **249ms** | All assertions passed |
+
+The ~200ms floor is the inherent round-trip latency of the two-hop overlay (peer→relay→peer). The HTTP proxy eliminates per-request TCP handshake overhead through upstream connection pooling.
+
+## Port Mapping (Docker)
+| Service | Container port | peer-a host port | peer-b host port |
+|---------|---------------|-----------------|-----------------|
+| UDP tunnel | 5040 | 5042 | 5043 |
+| nginx | 80 | — | — |
+| Envoy TCP proxy | 15040 | 15042 | 15043 |
+| Envoy HTTP proxy | 15050 | 15052 | 15053 |
+| Envoy admin | 9901 | 9901 | 9902 |
