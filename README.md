@@ -105,13 +105,21 @@ $ RELAY_IP=<relay-public-ip> ./run-peer-b-in-docker.sh
 
 Override host ports with `PEER_A_HOST_PORT` / `PEER_B_HOST_PORT` if the defaults conflict with other services.
 
-### Envoy TCP Proxy
+### Envoy Proxy
 
-Each peer container includes an [Envoy](https://www.envoyproxy.io/) proxy. When `ENVOY_UPSTREAM_HOST` is set, Envoy starts a TCP listener on port `15040` and forwards connections to the configured upstream — useful for proxying traffic across the tunnel to a service running on a remote peer.
+Each peer container includes an [Envoy](https://www.envoyproxy.io/) proxy. When `ENVOY_UPSTREAM_HOST` is set, Envoy starts and forwards connections to the configured upstream — useful for proxying traffic across the tunnel to a service running on a remote peer.
+
+Two listeners are available:
+
+| Listener | Port | Mode | Notes |
+|----------|------|------|-------|
+| TCP proxy | 15040 | L4 pass-through | One upstream connection per downstream connection |
+| HTTP proxy | 15050 | L7 with connection pooling | Recommended for HTTP — amortizes tunnel connect cost across ~130–170 requests per upstream connection |
+| Admin | 9901 | HTTP stats/config | `/stats`, `/clusters`, `/listeners` |
 
 By default:
-- peer-a proxies to `10.9.0.3:80` (peer-b's nginx), exposed on host port `15042`
-- peer-b proxies to `10.9.0.2:80` (peer-a's nginx), exposed on host port `15043`
+- peer-a proxies to `10.9.0.3:80` (peer-b's nginx), exposed on host ports `15042` (TCP), `15052` (HTTP), `9901` (admin)
+- peer-b proxies to `10.9.0.2:80` (peer-a's nginx), exposed on host ports `15043` (TCP), `15053` (HTTP), `9902` (admin)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -119,11 +127,31 @@ By default:
 | `ENVOY_UPSTREAM_PORT` | `80` | Upstream port |
 
 ```bash
-# Proxy through peer-a's Envoy to peer-b's nginx (from your Mac)
+# HTTP proxy through peer-a's Envoy to peer-b's nginx (recommended)
+$ curl http://localhost:15052
+
+# TCP proxy (transparent L4)
 $ curl http://localhost:15042
+
+# Envoy admin stats
+$ curl http://localhost:9901/stats
 ```
 
 > **Note (Docker Desktop on Mac):** Without pinned host ports, Docker Desktop's userspace NAT can remap the UDP source port between the handshake and subsequent data packets, causing the relay to drop traffic as "unknown peer".
+
+### Performance
+
+Performance was measured using [gatling-scala-example](https://github.com/jecklgamis/gatling-scala-example) sending HTTP GET requests through peer-a's Envoy HTTP proxy (port 15052) to peer-b's nginx, running in Docker on a single Mac host.
+
+The ~200ms response time floor is the inherent round-trip latency of the two-hop encrypted overlay (peer-a → relay → peer-b).
+
+| Load | Requests | OK | p50 | p95 | p99 | Max |
+|------|----------|----|-----|-----|-----|-----|
+| 10 rps | 4,800 | **100%** | 204ms | 222ms | 249ms | 653ms |
+| 40 rps | 9,600 | **100%** | 203ms | 209ms | 228ms | 849ms |
+| 100 rps | 24,000 | **100%** | 202ms | 207ms | 216ms | 660ms |
+
+Latency tightens as load increases — connection pool utilization improves at higher concurrency, reducing variance. The ~200ms floor holds stable across all load levels.
 
 ### Testing
 
