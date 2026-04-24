@@ -87,28 +87,38 @@ Custom `fprintf`-based logging defined in `common.h`. Global `log_level` variabl
 ## Build
 ```
 make all          # compile peer binary
+make image        # build Docker image (lane-cove-tunnel-peer:latest)
 make clean        # remove binary
 ```
 
 ## Running With Docker
-```
+```bash
+# Setup (once)
 ./generate-peer-keys.sh relay peer-1 peer-2
-./run-relay-in-docker.sh
-RELAY_IP=<ip> ./run-peer-1-in-docker.sh
-RELAY_IP=<ip> ./run-peer-2-in-docker.sh
+make image
+
+# Local testing (all on one Mac — 3 terminals)
+./run-relay-in-docker-dev.sh
+RELAY_IP=<mac-ip> ./run-peer-1-in-docker.sh
+RELAY_IP=<mac-ip> ./run-peer-2-in-docker.sh
 ```
 
 ## Docker
-- `Dockerfile.peer` — multi-stage build (`debian:bookworm-slim`); accepts `KEY_FILE` and `CRT_FILE` build args; includes iproute2, nginx, curl, ping, ifconfig, ssh, Envoy proxy (~299 MB total)
+- `Dockerfile.peer` — multi-stage build (`debian:bookworm-slim`); generic image, keys mounted at runtime; includes iproute2, nginx, curl, ping, ifconfig, ssh, Envoy proxy (~299 MB total)
 - `docker-entrypoint-peer.sh` — reads `PEER_PUB_n`/`PEER_ENDPOINT_n`/`PEER_ALLOWED_IPS_n` env vars, creates TUN, starts nginx, optionally starts Envoy (when `ENVOY_UPSTREAM_HOST` is set), starts peer
+- `common.sh` — shared helpers: OpenSSL detection (Homebrew on macOS), `extract_pub`, `detect_local_ip` (macOS/Linux)
 - `envoy.yaml.tmpl` — Envoy static config template; two listeners sharing one upstream cluster:
   - **TCP proxy** on `0.0.0.0:15040` — transparent L4 pass-through, one upstream connection per downstream connection
   - **HTTP proxy** on `0.0.0.0:15050` — L7 with upstream connection pooling (~130 requests/connection); eliminates per-request TCP handshake cost through the tunnel; recommended for HTTP workloads
   - Admin interface on `0.0.0.0:9901`
-- `create-peer-tunnel.sh` — creates TUN interface using `PEER_IP` and `PEER_ROUTES`
-- `run-relay-in-docker.sh` — builds relay image (relay.key/crt), extracts peer-1/peer-2 pubkeys, runs container
-- `run-peer-1-in-docker.sh` — builds peer-1 image, auto-detects relay IP from en0/en1, runs container
-- `run-peer-2-in-docker.sh` — builds peer-2 image, auto-detects relay IP from en0/en1, runs container
+- `create-peer-tunnel.sh <tunnel> <ip/cidr> [routes...]` — creates TUN interface, assigns overlay IP, disables ICMP redirects
+- `run-relay-in-docker.sh` — fully explicit CLI args; extracts pubkeys from `.crt` files, mounts keys as volumes
+- `run-relay-in-docker-dev.sh` — thin wrapper with defaults for local testing (relay.key/crt, peer-1/2 certs)
+- `run-peer-in-docker.sh` — fully explicit CLI args for running any peer in Docker
+- `run-peer-1-in-docker.sh` / `run-peer-2-in-docker.sh` — thin wrappers with defaults; auto-detect relay IP
+- `run-as-relay.sh` / `run-as-peer.sh` — native Linux wrappers; take `.crt` files and extract pubkeys internally
+- `test-tunnel.sh <container> <target_ip>` — ping + curl target through tunnel from a container
+- `exec-shell.sh <container>` — open a bash shell in a running container
 
 ## CLI Options
 

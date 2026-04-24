@@ -92,14 +92,38 @@ Distribute public keys (`.crt` files only — never share `.key` files):
 
 ### Running With Docker
 
+**Setup (once):**
+```bash
+$ ./generate-peer-keys.sh relay peer-1 peer-2
+$ make image
+```
+
+**Local testing (all on one Mac — 3 terminals):**
+```bash
+# Terminal 1 — relay
+$ ./run-relay-in-docker-dev.sh
+
+# Terminal 2 — peer-1
+$ RELAY_IP=<your-mac-ip> ./run-peer-1-in-docker.sh
+
+# Terminal 3 — peer-2
+$ RELAY_IP=<your-mac-ip> ./run-peer-2-in-docker.sh
+```
+
+Get your Mac IP: `ipconfig getifaddr en0`
+
+**Distributed (relay on VPS, peers on separate machines):**
 ```bash
 # On the relay (VPS)
-$ ./run-relay-in-docker.sh
+$ ./run-relay-in-docker.sh -i lanecove0 -k relay.key -c relay.crt \
+    --peer-ip 10.9.0.1/24 \
+    -p peer-1.crt:10.9.0.2/32 \
+    -p peer-2.crt:10.9.0.3/32
 
-# On peer-1 — binds host UDP port 5041 to pin the NAT mapping
+# On peer-1
 $ RELAY_IP=<relay-public-ip> ./run-peer-1-in-docker.sh
 
-# On peer-2 — binds host UDP port 5042
+# On peer-2
 $ RELAY_IP=<relay-public-ip> ./run-peer-2-in-docker.sh
 ```
 
@@ -174,6 +198,10 @@ $ ./test-tunnel-relay.sh
 # Shell into containers
 $ ./exec-shell-to-peer-1-container.sh
 $ ./exec-shell-to-peer-2-container.sh
+
+# Generic — test any container/target or open a shell
+$ ./test-tunnel.sh lane-cove-tunnel-peer-1 10.9.0.3
+$ ./exec-shell.sh lane-cove-tunnel-peer-1
 ```
 
 ### Running Natively (Linux)
@@ -182,29 +210,24 @@ $ ./exec-shell-to-peer-2-container.sh
 # Generate keys
 $ ./generate-peer-keys.sh relay peer-1 peer-2
 
-# Relay (public VPS) — inbound only, no -E flag
-$ PEER_IP=10.9.0.1/24 ./create-peer-tunnel.sh
-$ ./run-relay.sh   # reads relay.key/crt + peer-1.crt + peer-2.crt
+# Relay (public VPS) — inbound only
+$ ./create-peer-tunnel.sh lanecove0 10.9.0.1/24
+$ ./run-as-relay.sh -i lanecove0 -k relay.key \
+    -p peer-1.crt:10.9.0.2/32 \
+    -p peer-2.crt:10.9.0.3/32
 
 # peer-1 — connects outbound to relay
-$ PEER_IP=10.9.0.2/24 ./create-peer-tunnel.sh
-$ PEER_KEY=peer-1.key PEER_IP=10.9.0.2/24 \
-  PEER_PUB_1=<relay-pubkey-hex> PEER_ENDPOINT_1=<relay-ip>:5040 PEER_ALLOWED_IPS_1=10.9.0.0/24 \
-  ./run-peer-1s-relay.sh
+$ ./create-peer-tunnel.sh lanecove0 10.9.0.2/24
+$ ./run-as-peer.sh -i lanecove0 -k peer-1.key \
+    -p relay.crt:<relay-ip>:5040:10.9.0.0/24
 
 # peer-2 — connects outbound to relay
-$ PEER_IP=10.9.0.3/24 ./create-peer-tunnel.sh
-$ PEER_KEY=peer-2.key PEER_IP=10.9.0.3/24 \
-  PEER_PUB_1=<relay-pubkey-hex> PEER_ENDPOINT_1=<relay-ip>:5040 PEER_ALLOWED_IPS_1=10.9.0.0/24 \
-  ./run-peer-1s-relay.sh
+$ ./create-peer-tunnel.sh lanecove0 10.9.0.3/24
+$ ./run-as-peer.sh -i lanecove0 -k peer-2.key \
+    -p relay.crt:<relay-ip>:5040:10.9.0.0/24
 ```
 
 `create-peer-tunnel.sh` creates the TUN interface, assigns the overlay IP, disables ICMP redirects, and marks the interface unmanaged in NetworkManager.
-
-Extract a peer's public key hex from its `.crt` file:
-```bash
-$ openssl pkey -in relay.crt -pubin -outform DER | tail -c 32 | od -An -tx1 | tr -d ' \n'
-```
 
 ### Peer CLI Options
 
