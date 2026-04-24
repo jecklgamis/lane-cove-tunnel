@@ -141,17 +141,23 @@ $ curl http://localhost:9901/stats
 
 ### Performance
 
-Performance was measured using [gatling-scala-example](https://github.com/jecklgamis/gatling-scala-example) sending HTTP GET requests through peer-a's Envoy HTTP proxy (port 15052) to peer-b's nginx, running in Docker on a single Mac host.
+Performance was measured using [gatling-scala-example](https://github.com/jecklgamis/gatling-scala-example) sending HTTP GET requests through peer-a's Envoy HTTP proxy (port 15052) to peer-b's nginx.
+
+**Test environment:**
+- Relay: DigitalOcean droplet (1 vCPU, 512 MB RAM) running the relay binary
+- peer-a: Mac Mini M4 (Docker container)
+- peer-b: MacBook Air M4 (Docker container)
 
 The ~200ms response time floor is the inherent round-trip latency of the two-hop encrypted overlay (peer-a → relay → peer-b).
 
-| Load | Requests | OK | p50 | p95 | p99 | Max |
-|------|----------|----|-----|-----|-----|-----|
-| 10 rps | 4,800 | **100%** | 204ms | 222ms | 249ms | 653ms |
-| 40 rps | 9,600 | **100%** | 203ms | 209ms | 228ms | 849ms |
-| 100 rps | 24,000 | **100%** | 202ms | 207ms | 216ms | 660ms |
+| Load | Requests | OK | p50 | p95 | p99 | Max | Notes |
+|------|----------|----|-----|-----|-----|-----|-------|
+| 10 rps | 4,800 | **100%** | 204ms | 222ms | 249ms | 653ms | |
+| 40 rps | 9,600 | **100%** | 203ms | 209ms | 228ms | 849ms | |
+| 100 rps | 24,000 | **100%** | 202ms | 207ms | 216ms | 660ms | |
+| 250 rps | 60,000 | **82%** | — | — | — | — | Relay CPU saturated — 18% 503/504 errors |
 
-Latency tightens as load increases — connection pool utilization improves at higher concurrency, reducing variance. The ~200ms floor holds stable across all load levels.
+Latency tightens as load increases — connection pool utilization improves at higher concurrency, reducing variance. The ~200ms floor holds stable up to 100 rps. At 250 rps the single-threaded relay event loop on a 1 vCPU droplet saturates: connect timeouts spike and Envoy begins shedding requests. The ceiling for this hardware is somewhere between 100 and 250 rps.
 
 ### Testing
 
