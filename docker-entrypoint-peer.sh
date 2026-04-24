@@ -29,7 +29,7 @@ fi
 
 export PEER_IP PEER_ROUTES
 ./create-peer-tunnel.sh
-HOST_IP=$(hostname -I | awk '{print $1}')
+HOST_IP=${PEER_IP%%/*}
 export HOST_IP
 envsubst < index.html.tmpl > /var/www/html/index.html
 nginx
