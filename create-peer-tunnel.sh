@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 set -e
-TUNNEL_NAME=${TUNNEL_NAME:-lanecove0}
-PEER_IP=${PEER_IP:-10.9.0.1/24}
-PEER_ROUTES=${PEER_ROUTES:-}
+if [[ $# -ge 2 ]]; then
+    TUNNEL_NAME="$1"
+    PEER_IP="$2"
+    shift 2
+    PEER_ROUTES="$*"
+elif [[ -z "${TUNNEL_NAME:-}" || -z "${PEER_IP:-}" ]]; then
+    echo "Usage: $0 <tunnel_name> <peer_ip/cidr> [route1 route2 ...]"
+    echo "Example: $0 lanecove0 10.9.0.2/24 10.9.0.0/24"
+    exit 1
+fi
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO]  $*"; }
 

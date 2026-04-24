@@ -10,7 +10,7 @@ fi
 
 if [[ $# -eq 0 ]]; then
     echo "Usage: $0 <name> [name2 ...]"
-    echo "Example: $0 peerA peerB relay"
+    echo "Example: $0 peer-1 peer-2 relay"
     exit 1
 fi
 

@@ -50,27 +50,27 @@ The same `peer` binary supports two topologies:
 **Hub-and-spoke (with relay)** — peers behind NAT connect outbound to a relay with a public IP. The relay forwards traffic between them.
 
 ```
-peer-a (10.9.0.2) ──┐
+peer-1 (10.9.0.2) ──┐
                      ├── UDP 5040 ── relay (10.9.0.1, public IP)
-peer-b (10.9.0.3) ──┘
+peer-2 (10.9.0.3) ──┘
 ```
 
 **Direct peer-to-peer (no relay)** — if at least one peer has a public IP (or both are on the same network), they can connect directly without a relay. The peer with the public IP omits `-E`; the other peer points `-E` at it.
 
 ```
-peer-a (10.9.0.1, public IP) ──── UDP 5040 ──── peer-b (10.9.0.2)
+peer-1 (10.9.0.1, public IP) ──── UDP 5040 ──── peer-2 (10.9.0.2)
 ```
 
 ```bash
-# peer-a — public IP, inbound only (no -E)
+# peer-1 — public IP, inbound only (no -E)
 $ PEER_IP=10.9.0.1/24 ./create-peer-tunnel.sh
-$ ./peer -i lanecove0 -K peer-a.key \
-    -P <peer-b-pubkey-hex> -R 10.9.0.2/32
+$ ./peer -i lanecove0 -K peer-1.key \
+    -P <peer-2-pubkey-hex> -R 10.9.0.2/32
 
-# peer-b — connects outbound to peer-a
+# peer-2 — connects outbound to peer-1
 $ PEER_IP=10.9.0.2/24 ./create-peer-tunnel.sh
-$ ./peer -i lanecove0 -K peer-b.key \
-    -P <peer-a-pubkey-hex> -E <peer-a-ip>:5040 -R 10.9.0.1/32
+$ ./peer -i lanecove0 -K peer-2.key \
+    -P <peer-1-pubkey-hex> -E <peer-1-ip>:5040 -R 10.9.0.1/32
 ```
 
 If both peers have public IPs, both can set `-E` pointing at each other — they will race to initiate and converge on a shared session.
@@ -78,17 +78,17 @@ If both peers have public IPs, both can set `-E` pointing at each other — they
 ### Key Generation
 
 ```bash
-$ ./generate-peer-keys.sh relay peer-a peer-b
-# produces: relay.key/crt, peer-a.key/crt, peer-b.key/crt
+$ ./generate-peer-keys.sh relay peer-1 peer-2
+# produces: relay.key/crt, peer-1.key/crt, peer-2.key/crt
 ```
 
 Distribute public keys (`.crt` files only — never share `.key` files):
 
 | Machine | Needs |
 |---------|-------|
-| relay (VPS) | `relay.key`, `relay.crt`, `peer-a.crt`, `peer-b.crt` |
-| peer-a | `peer-a.key`, `peer-a.crt`, `relay.crt` |
-| peer-b | `peer-b.key`, `peer-b.crt`, `relay.crt` |
+| relay (VPS) | `relay.key`, `relay.crt`, `peer-1.crt`, `peer-2.crt` |
+| peer-1 | `peer-1.key`, `peer-1.crt`, `relay.crt` |
+| peer-2 | `peer-2.key`, `peer-2.crt`, `relay.crt` |
 
 ### Running With Docker
 
@@ -96,14 +96,14 @@ Distribute public keys (`.crt` files only — never share `.key` files):
 # On the relay (VPS)
 $ ./run-relay-in-docker.sh
 
-# On peer-a — binds host UDP port 5041 to pin the NAT mapping
-$ RELAY_IP=<relay-public-ip> ./run-peer-a-in-docker.sh
+# On peer-1 — binds host UDP port 5041 to pin the NAT mapping
+$ RELAY_IP=<relay-public-ip> ./run-peer-1-in-docker.sh
 
-# On peer-b — binds host UDP port 5042
-$ RELAY_IP=<relay-public-ip> ./run-peer-b-in-docker.sh
+# On peer-2 — binds host UDP port 5042
+$ RELAY_IP=<relay-public-ip> ./run-peer-2-in-docker.sh
 ```
 
-Override host ports with `PEER_A_HOST_PORT` / `PEER_B_HOST_PORT` if the defaults conflict with other services.
+Override host ports with `PEER_1_HOST_PORT` / `PEER_2_HOST_PORT` if the defaults conflict with other services.
 
 ### Envoy Proxy
 
@@ -118,8 +118,8 @@ Two listeners are available:
 | Admin | 9901 | HTTP stats/config | `/stats`, `/clusters`, `/listeners` |
 
 By default:
-- peer-a proxies to `10.9.0.3:80` (peer-b's nginx), exposed on host ports `15042` (TCP), `15052` (HTTP), `9901` (admin)
-- peer-b proxies to `10.9.0.2:80` (peer-a's nginx), exposed on host ports `15043` (TCP), `15053` (HTTP), `9902` (admin)
+- peer-1 proxies to `10.9.0.3:80` (peer-2's nginx), exposed on host ports `15042` (TCP), `15052` (HTTP), `9901` (admin)
+- peer-2 proxies to `10.9.0.2:80` (peer-1's nginx), exposed on host ports `15043` (TCP), `15053` (HTTP), `9902` (admin)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -127,7 +127,7 @@ By default:
 | `ENVOY_UPSTREAM_PORT` | `80` | Upstream port |
 
 ```bash
-# HTTP proxy through peer-a's Envoy to peer-b's nginx (recommended)
+# HTTP proxy through peer-1's Envoy to peer-2's nginx (recommended)
 $ curl http://localhost:15052
 
 # TCP proxy (transparent L4)
@@ -141,14 +141,14 @@ $ curl http://localhost:9901/stats
 
 ### Performance
 
-Performance was measured using [gatling-scala-example](https://github.com/jecklgamis/gatling-scala-example) sending HTTP GET requests through peer-a's Envoy HTTP proxy (port 15052) to peer-b's nginx.
+Performance was measured using [gatling-scala-example](https://github.com/jecklgamis/gatling-scala-example) sending HTTP GET requests through peer-1's Envoy HTTP proxy (port 15052) to peer-2's nginx.
 
 **Test environment:**
 - Relay: DigitalOcean droplet (1 vCPU, 512 MB RAM) running the relay binary
-- peer-a: Mac Mini M4 (Docker container)
-- peer-b: MacBook Air M4 (Docker container)
+- peer-1: Mac Mini M4 (Docker container)
+- peer-2: MacBook Air M4 (Docker container)
 
-The ~200ms response time floor is the inherent round-trip latency of the two-hop encrypted overlay (peer-a → relay → peer-b).
+The ~200ms response time floor is the inherent round-trip latency of the two-hop encrypted overlay (peer-1 → relay → peer-2).
 
 | Load | Requests | OK | p50 | p95 | p99 | Max | Notes |
 |------|----------|----|-----|-----|-----|-----|-------|
@@ -162,41 +162,41 @@ Latency tightens as load increases — connection pool utilization improves at h
 ### Testing
 
 ```bash
-# From peer-a, ping/curl peer-b (10.9.0.3)
-$ ./test-tunnel-using-peer-a.sh
+# From peer-1, ping/curl peer-2 (10.9.0.3)
+$ ./test-tunnel-using-peer-1.sh
 
-# From peer-b, ping/curl peer-a (10.9.0.2)
-$ ./test-tunnel-using-peer-b.sh
+# From peer-2, ping/curl peer-1 (10.9.0.2)
+$ ./test-tunnel-using-peer-2.sh
 
-# From peer-a, ping/curl the relay (10.9.0.1)
+# From peer-1, ping/curl the relay (10.9.0.1)
 $ ./test-tunnel-relay.sh
 
 # Shell into containers
-$ ./exec-shell-to-peer-a-container.sh
-$ ./exec-shell-to-peer-b-container.sh
+$ ./exec-shell-to-peer-1-container.sh
+$ ./exec-shell-to-peer-2-container.sh
 ```
 
 ### Running Natively (Linux)
 
 ```bash
 # Generate keys
-$ ./generate-peer-keys.sh relay peer-a peer-b
+$ ./generate-peer-keys.sh relay peer-1 peer-2
 
 # Relay (public VPS) — inbound only, no -E flag
 $ PEER_IP=10.9.0.1/24 ./create-peer-tunnel.sh
-$ ./run-relay.sh   # reads relay.key/crt + peer-a.crt + peer-b.crt
+$ ./run-relay.sh   # reads relay.key/crt + peer-1.crt + peer-2.crt
 
-# peer-a — connects outbound to relay
+# peer-1 — connects outbound to relay
 $ PEER_IP=10.9.0.2/24 ./create-peer-tunnel.sh
-$ PEER_KEY=peer-a.key PEER_IP=10.9.0.2/24 \
+$ PEER_KEY=peer-1.key PEER_IP=10.9.0.2/24 \
   PEER_PUB_1=<relay-pubkey-hex> PEER_ENDPOINT_1=<relay-ip>:5040 PEER_ALLOWED_IPS_1=10.9.0.0/24 \
-  ./run-peer.sh
+  ./run-peer-1s-relay.sh
 
-# peer-b — connects outbound to relay
+# peer-2 — connects outbound to relay
 $ PEER_IP=10.9.0.3/24 ./create-peer-tunnel.sh
-$ PEER_KEY=peer-b.key PEER_IP=10.9.0.3/24 \
+$ PEER_KEY=peer-2.key PEER_IP=10.9.0.3/24 \
   PEER_PUB_1=<relay-pubkey-hex> PEER_ENDPOINT_1=<relay-ip>:5040 PEER_ALLOWED_IPS_1=10.9.0.0/24 \
-  ./run-peer.sh
+  ./run-peer-1s-relay.sh
 ```
 
 `create-peer-tunnel.sh` creates the TUN interface, assigns the overlay IP, disables ICMP redirects, and marks the interface unmanaged in NetworkManager.

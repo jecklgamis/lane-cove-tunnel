@@ -10,27 +10,27 @@ A simple Linux hub-and-spoke layer 3 overlay network using a TUN virtual interfa
 
 ### Topology
 ```
-peer-a (10.9.0.2) ──┐
+peer-1 (10.9.0.2) ──┐
                      ├── UDP 5040 ── relay (10.9.0.1, public IP)
-peer-b (10.9.0.3) ──┘
+peer-2 (10.9.0.3) ──┘
 ```
 
 - **relay** — public IP, inbound-only, routes traffic between peers
-- **peer-a / peer-b** — behind NAT, connect outbound to relay
+- **peer-1 / peer-2** — behind NAT, connect outbound to relay
 
 ### Key Provisioning
 Keys are X25519 key pairs stored in PEM files. Use `generate-peer-keys.sh` to generate key pairs.
 
 ```
-./generate-peer-keys.sh relay peer-a peer-b
-# produces: relay.key/crt, peer-a.key/crt, peer-b.key/crt
+./generate-peer-keys.sh relay peer-1 peer-2
+# produces: relay.key/crt, peer-1.key/crt, peer-2.key/crt
 ```
 
 | Machine | Needs |
 |---------|-------|
-| relay | `relay.key`, `relay.crt`, `peer-a.crt`, `peer-b.crt` |
-| peer-a | `peer-a.key`, `peer-a.crt`, `relay.crt` |
-| peer-b | `peer-b.key`, `peer-b.crt`, `relay.crt` |
+| relay | `relay.key`, `relay.crt`, `peer-1.crt`, `peer-2.crt` |
+| peer-1 | `peer-1.key`, `peer-1.crt`, `relay.crt` |
+| peer-2 | `peer-2.key`, `peer-2.crt`, `relay.crt` |
 
 ### Session Management
 - Sessions are stored in a flat array (`sessions[]`, max 64)
@@ -92,10 +92,10 @@ make clean        # remove binary
 
 ## Running With Docker
 ```
-./generate-peer-keys.sh relay peer-a peer-b
+./generate-peer-keys.sh relay peer-1 peer-2
 ./run-relay-in-docker.sh
-RELAY_IP=<ip> ./run-peer-a-in-docker.sh
-RELAY_IP=<ip> ./run-peer-b-in-docker.sh
+RELAY_IP=<ip> ./run-peer-1-in-docker.sh
+RELAY_IP=<ip> ./run-peer-2-in-docker.sh
 ```
 
 ## Docker
@@ -106,9 +106,9 @@ RELAY_IP=<ip> ./run-peer-b-in-docker.sh
   - **HTTP proxy** on `0.0.0.0:15050` — L7 with upstream connection pooling (~130 requests/connection); eliminates per-request TCP handshake cost through the tunnel; recommended for HTTP workloads
   - Admin interface on `0.0.0.0:9901`
 - `create-peer-tunnel.sh` — creates TUN interface using `PEER_IP` and `PEER_ROUTES`
-- `run-relay-in-docker.sh` — builds relay image (relay.key/crt), extracts peer-a/peer-b pubkeys, runs container
-- `run-peer-a-in-docker.sh` — builds peer-a image, auto-detects relay IP from en0/en1, runs container
-- `run-peer-b-in-docker.sh` — builds peer-b image, auto-detects relay IP from en0/en1, runs container
+- `run-relay-in-docker.sh` — builds relay image (relay.key/crt), extracts peer-1/peer-2 pubkeys, runs container
+- `run-peer-1-in-docker.sh` — builds peer-1 image, auto-detects relay IP from en0/en1, runs container
+- `run-peer-2-in-docker.sh` — builds peer-2 image, auto-detects relay IP from en0/en1, runs container
 
 ## CLI Options
 
@@ -129,7 +129,7 @@ peer -i <iface> [-p <port>] [-K <keyfile>] -P <pubkey_hex> [-E <ip:port>] [-R <c
 
 ## Tunnel Interface
 - Interface name: `lanecove0`
-- Overlay network: `10.9.0.0/24` (relay=`10.9.0.1`, peer-a=`10.9.0.2`, peer-b=`10.9.0.3`)
+- Overlay network: `10.9.0.0/24` (relay=`10.9.0.1`, peer-1=`10.9.0.2`, peer-2=`10.9.0.3`)
 
 ## Key Environment Variables
 | Variable | Default | Description |
@@ -152,7 +152,7 @@ peer -i <iface> [-p <port>] [-K <keyfile>] -P <pubkey_hex> [-E <ip:port>] [-R <c
 
 ## Performance Reference
 
-Test environment: relay on DigitalOcean 1 vCPU / 512 MB droplet; peers on Mac Mini M4 and MacBook Air M4 (Docker containers). Load generated with [gatling-scala-example](https://github.com/jecklgamis/gatling-scala-example) via Envoy HTTP proxy (port 15052) → peer-b nginx.
+Test environment: relay on DigitalOcean 1 vCPU / 512 MB droplet; peers on Mac Mini M4 and MacBook Air M4 (Docker containers). Load generated with [gatling-scala-example](https://github.com/jecklgamis/gatling-scala-example) via Envoy HTTP proxy (port 15052) → peer-2 nginx.
 
 **Optimization history (10 rps baseline):**
 
@@ -174,7 +174,7 @@ Test environment: relay on DigitalOcean 1 vCPU / 512 MB droplet; peers on Mac Mi
 The ~200ms floor is the inherent round-trip latency of the two-hop overlay (peer→relay→peer). The single-threaded relay event loop on 1 vCPU saturates between 100 and 250 rps.
 
 ## Port Mapping (Docker)
-| Service | Container port | peer-a host port | peer-b host port |
+| Service | Container port | peer-1 host port | peer-2 host port |
 |---------|---------------|-----------------|-----------------|
 | UDP tunnel | 5040 | 5042 | 5043 |
 | nginx | 80 | — | — |

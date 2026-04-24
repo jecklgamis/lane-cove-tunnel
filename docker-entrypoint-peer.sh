@@ -4,7 +4,7 @@ PEER_PORT=${PEER_PORT:-5040}
 PEER_IP=${PEER_IP:-10.9.0.1/24}
 PEER_ROUTES=${PEER_ROUTES:-}
 
-PEER_ARGS=()
+PEER_1RGS=()
 i=1
 while true; do
     pub_var="PEER_PUB_${i}"
@@ -14,21 +14,20 @@ while true; do
     [[ -z "$pub" ]] && break
     ep="${!ep_var}"
     routes="${!routes_var}"
-    PEER_ARGS+=(-P "$pub")
-    [[ -n "$ep" ]] && PEER_ARGS+=(-E "$ep")
+    PEER_1RGS+=(-P "$pub")
+    [[ -n "$ep" ]] && PEER_1RGS+=(-E "$ep")
     for cidr in $routes; do
-        PEER_ARGS+=(-R "$cidr")
+        PEER_1RGS+=(-R "$cidr")
     done
     i=$((i + 1))
 done
 
-if [[ ${#PEER_ARGS[@]} -eq 0 ]]; then
+if [[ ${#PEER_1RGS[@]} -eq 0 ]]; then
     echo "No peers configured. Set PEER_PUB_1, PEER_ENDPOINT_1, PEER_ALLOWED_IPS_1, etc."
     exit 1
 fi
 
-export PEER_IP PEER_ROUTES
-./create-peer-tunnel.sh
+./create-peer-tunnel.sh "${TUNNEL_NAME}" "${PEER_IP}" ${PEER_ROUTES}
 HOST_IP=${PEER_IP%%/*}
 export HOST_IP
 envsubst < index.html.tmpl > /var/www/html/index.html
@@ -40,4 +39,4 @@ if [[ -n "${ENVOY_UPSTREAM_HOST:-}" ]]; then
     echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO]  Starting Envoy: TCP listener 0.0.0.0:15040 -> ${ENVOY_UPSTREAM_HOST}:${ENVOY_UPSTREAM_PORT}"
     envoy -c envoy.yaml --log-level error --log-path envoy.log &
 fi
-./peer -i "${TUNNEL_NAME}" -p "${PEER_PORT}" -K peer.key "${PEER_ARGS[@]}" -v
+./peer -i "${TUNNEL_NAME}" -p "${PEER_PORT}" -K peer.key "${PEER_1RGS[@]}" -v

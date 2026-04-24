@@ -1,49 +1,82 @@
 #!/usr/bin/env bash
 set -e
-# Relay peer: inbound-only, routes between peerA and peerB.
-# Required key files: relay.key, relay.crt, peer-a.crt, peer-b.crt
-# Optional env vars:
-#   TUNNEL_NAME  (default: lanecove0)
-#   PEER_PORT    (default: 5040)
-#   RELAY_KEY    (default: relay.key)
-#   RELAY_CRT    (default: relay.crt)
-#   PEER_A_CRT   (default: peer-a.crt)
-#   PEER_B_CRT   (default: peer-b.crt)
+# Usage: ./run-relay-in-docker.sh -i <tunnel> -k <keyfile> -c <crtfile> --peer-ip <ip/cidr>
+#          -p <peer_crt:cidr> [-p ...] [-port <port>] [-v]
+# Example:
+#   ./run-relay-in-docker.sh -i lanecove0 -k relay.key -c relay.crt \
+#     --peer-ip 10.9.0.1/24 \
+#     -p peer-1.crt:10.9.0.2/32 \
+#     -p peer-2.crt:10.9.0.3/32
 
-TUNNEL_NAME=${TUNNEL_NAME:-lanecove0}
-PEER_PORT=${PEER_PORT:-5040}
-RELAY_KEY=${RELAY_KEY:-relay.key}
-RELAY_CRT=${RELAY_CRT:-relay.crt}
-PEER_A_CRT=${PEER_A_CRT:-peer-a.crt}
-PEER_B_CRT=${PEER_B_CRT:-peer-b.crt}
+usage() {
+    echo "Usage: $0 -i <tunnel> -k <keyfile> -c <crtfile> --peer-ip <ip/cidr> -p <crt:cidr> [-p ...] [-port <port>] [-v]"
+    echo ""
+    echo "Required:"
+    echo "  -i          TUN interface name   e.g. lanecove0"
+    echo "  -k          Private key file     e.g. relay.key"
+    echo "  -c          Certificate file     e.g. relay.crt"
+    echo "  --peer-ip   Overlay IP/CIDR      e.g. 10.9.0.1/24"
+    echo "  -p          Peer: <crt>:<cidr>   e.g. peer-1.crt:10.9.0.2/32 (repeatable)"
+    echo ""
+    echo "Optional:"
+    echo "  -port       Listen port          (default: 5040)"
+    echo "  -v          Verbose logging"
+    exit 1
+}
 
-OPENSSL=openssl
-if [[ "$(uname)" == "Darwin" ]]; then
-    BREW_OPENSSL="$(brew --prefix openssl 2>/dev/null)/bin/openssl"
-    [[ -x "$BREW_OPENSSL" ]] && OPENSSL="$BREW_OPENSSL"
-fi
+source "$(dirname "$0")/common.sh"
 
-extract_pub() { ${OPENSSL} pkey -in "$1" -pubin -outform DER | tail -c 32 | od -An -tx1 | tr -d ' \n'; }
+TUNNEL_NAME=""
+PEER_KEY=""
+PEER_CRT=""
+PEER_IP=""
+PEER_PORT=5040
+PEER_ARGS=()
+peer_idx=1
 
-PEER_A_PUB=$(extract_pub "$PEER_A_CRT")
-PEER_B_PUB=$(extract_pub "$PEER_B_CRT")
-echo "peerA public key: ${PEER_A_PUB}"
-echo "peerB public key: ${PEER_B_PUB}"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -i)         TUNNEL_NAME="$2"; shift 2 ;;
+        -k)         PEER_KEY="$2"; shift 2 ;;
+        -c)         PEER_CRT="$2"; shift 2 ;;
+        --peer-ip)  PEER_IP="$2"; shift 2 ;;
+        -port)      PEER_PORT="$2"; shift 2 ;;
+        -v)         VERBOSE="-v"; shift ;;
+        -p)
+            IFS=':' read -r crt_file allowed_ips <<< "$2"
+            [[ -z "$crt_file" || -z "$allowed_ips" ]] && {
+                echo "Error: -p must be <crt_file>:<cidr>"
+                exit 1
+            }
+            [[ ! -f "$crt_file" ]] && { echo "Error: cert file not found: $crt_file"; exit 1; }
+            pub=$(extract_pub "$crt_file")
+            PEER_ARGS+=(
+                -e "PEER_PUB_${peer_idx}=${pub}"
+                -e "PEER_ALLOWED_IPS_${peer_idx}=${allowed_ips}"
+            )
+            peer_idx=$((peer_idx + 1))
+            shift 2
+            ;;
+        *) usage ;;
+    esac
+done
 
-docker build -f Dockerfile.peer \
-  --build-arg KEY_FILE="${RELAY_KEY}" \
-  --build-arg CRT_FILE="${RELAY_CRT}" \
-  -t lane-cove-tunnel-relay:latest .
+[[ -z "$TUNNEL_NAME" ]] && { echo "Error: -i is required"; usage; }
+[[ -z "$PEER_KEY" ]]    && { echo "Error: -k is required"; usage; }
+[[ -z "$PEER_CRT" ]]    && { echo "Error: -c is required"; usage; }
+[[ -z "$PEER_IP" ]]     && { echo "Error: --peer-ip is required"; usage; }
+[[ ${#PEER_ARGS[@]} -eq 0 ]] && { echo "Error: at least one -p is required"; usage; }
+[[ ! -f "$PEER_KEY" ]]  && { echo "Error: key file not found: $PEER_KEY"; exit 1; }
+[[ ! -f "$PEER_CRT" ]]  && { echo "Error: cert file not found: $PEER_CRT"; exit 1; }
 
 docker run \
   --cap-add=NET_ADMIN \
   --device=/dev/net/tun \
+  -v "$(pwd)/${PEER_KEY}:/app/peer.key:ro" \
+  -v "$(pwd)/${PEER_CRT}:/app/peer.crt:ro" \
+  -p "${PEER_PORT}:${PEER_PORT}/udp" \
   -e TUNNEL_NAME="${TUNNEL_NAME}" \
   -e PEER_PORT="${PEER_PORT}" \
-  -e PEER_IP="10.9.0.1/24" \
-  -e PEER_PUB_1="${PEER_A_PUB}" \
-  -e PEER_ALLOWED_IPS_1="10.9.0.2/32" \
-  -e PEER_PUB_2="${PEER_B_PUB}" \
-  -e PEER_ALLOWED_IPS_2="10.9.0.3/32" \
-  -p "${PEER_PORT}:${PEER_PORT}/udp" \
-  -it lane-cove-tunnel-relay:latest
+  -e PEER_IP="${PEER_IP}" \
+  "${PEER_ARGS[@]}" \
+  -it lane-cove-tunnel-peer:latest
