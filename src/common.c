@@ -114,7 +114,7 @@ int open_tunnel(char *tunnel) {
     return tun_fd;
 }
 
-static int generate_x25519_keypair(EVP_PKEY **pkey_out, unsigned char *pub_out) {
+int generate_eph_keypair(EVP_PKEY **pkey_out, unsigned char *pub_out) {
     EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_X25519, NULL);
     if (!pctx) return -1;
     EVP_PKEY *pkey = NULL;
@@ -153,7 +153,7 @@ int load_or_generate_static_key(const char *path, EVP_PKEY **pkey_out, unsigned 
         LOG_ERROR("Failed to parse static key from %s", path);
         return -1;
     }
-    if (generate_x25519_keypair(pkey_out, pub_out) < 0) {
+    if (generate_eph_keypair(pkey_out, pub_out) < 0) {
         LOG_ERROR("Failed to generate static key");
         return -1;
     }
@@ -333,7 +333,7 @@ int handshake_client_send(int sock_fd, struct sockaddr_in *server_addr,
 
     EVP_PKEY *eph_key = NULL;
     unsigned char eph_pub[DH_PUBKEY_LEN];
-    if (generate_x25519_keypair(&eph_key, eph_pub) < 0) {
+    if (generate_eph_keypair(&eph_key, eph_pub) < 0) {
         LOG_ERROR("Failed to generate ephemeral key pair");
         return -1;
     }
@@ -455,6 +455,7 @@ int handshake_server_respond(int sock_fd, const unsigned char *pkt, int pkt_len,
                              struct sockaddr_in *peer_addr,
                              const unsigned char *psk_key,
                              EVP_PKEY *static_key, const unsigned char *static_pub,
+                             EVP_PKEY *precomp_eph_key, const unsigned char *precomp_eph_pub,
                              unsigned char *client_static_pub_out,
                              unsigned char *session_key) {
     int expected = HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN + (psk_key ? HMAC_LEN : 0);
@@ -495,18 +496,14 @@ int handshake_server_respond(int sock_fd, const unsigned char *pkt, int pkt_len,
     }
     memcpy(client_static_pub_out, client_static_pub, DH_PUBKEY_LEN);
 
-    EVP_PKEY *eph_key = NULL;
+    EVP_PKEY *eph_key = precomp_eph_key;
     unsigned char eph_pub[DH_PUBKEY_LEN];
-    if (generate_x25519_keypair(&eph_key, eph_pub) < 0) {
-        LOG_ERROR("Failed to generate ephemeral key pair");
-        return -1;
-    }
+    memcpy(eph_pub, precomp_eph_pub, DH_PUBKEY_LEN);
 
     /* ecdh_eph = DH(eph_s, eph_c) — also encrypts server identity */
     unsigned char ecdh_eph[DH_PUBKEY_LEN];
     if (x25519_shared_secret(eph_key, client_eph_pub, ecdh_eph) < 0) {
         LOG_ERROR("X25519 key derivation failed");
-        EVP_PKEY_free(eph_key);
         return -1;
     }
 
@@ -514,7 +511,6 @@ int handshake_server_respond(int sock_fd, const unsigned char *pkt, int pkt_len,
     unsigned char enc_server_static[HS_ENCRYPTED_PUB_LEN];
     if (encrypt_identity(ecdh_eph, static_pub, enc_server_static) < 0) {
         LOG_ERROR("Failed to encrypt server identity");
-        EVP_PKEY_free(eph_key);
         return -1;
     }
 
@@ -528,7 +524,6 @@ int handshake_server_respond(int sock_fd, const unsigned char *pkt, int pkt_len,
         if (compute_hmac(psk_key, resp + HEADER_SIZE, DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN,
                          resp + resp_len) < 0) {
             LOG_ERROR("HMAC computation failed");
-            EVP_PKEY_free(eph_key);
             return -1;
         }
         resp_len += HMAC_LEN;
@@ -536,14 +531,12 @@ int handshake_server_respond(int sock_fd, const unsigned char *pkt, int pkt_len,
     if (sendto(sock_fd, resp, resp_len, 0,
                (struct sockaddr *) peer_addr, sizeof(*peer_addr)) < 0) {
         LOG_ERROR("sendto() handshake response failed : %s", strerror(errno));
-        EVP_PKEY_free(eph_key);
         return -1;
     }
 
     unsigned char ecdh_sc_es[DH_PUBKEY_LEN];
     if (x25519_shared_secret(eph_key, client_static_pub, ecdh_sc_es) < 0) {
         LOG_ERROR("X25519 key derivation failed");
-        EVP_PKEY_free(eph_key);
         return -1;
     }
 
@@ -551,6 +544,5 @@ int handshake_server_respond(int sock_fd, const unsigned char *pkt, int pkt_len,
                        client_eph_pub, eph_pub,
                        client_static_pub, static_pub,
                        session_key);
-    EVP_PKEY_free(eph_key);
     return 0;
 }

@@ -62,6 +62,24 @@ static peer_session_t sessions[MAX_PEERS];
 static int            session_slots = 0;
 static pending_hs_t   pending_hs[MAX_PEERS];
 
+/* Pre-generated ephemeral keypair for the inbound handshake responder.
+ * Generated at startup and refreshed immediately after each use so the
+ * expensive X25519 keygen never runs on the event-loop hot path. */
+static EVP_PKEY      *precomp_eph_key = NULL;
+static unsigned char  precomp_eph_pub[DH_PUBKEY_LEN];
+
+static void refresh_precomp_eph(void) {
+    EVP_PKEY *old = precomp_eph_key;
+    EVP_PKEY *nk  = NULL;
+    if (generate_eph_keypair(&nk, precomp_eph_pub) < 0) {
+        LOG_WARN("Failed to pre-generate ephemeral keypair");
+        precomp_eph_key = old;
+        return;
+    }
+    precomp_eph_key = nk;
+    if (old) EVP_PKEY_free(old);
+}
+
 static int parse_cidr(const char *cidr, ip_prefix_t *out) {
     char buf[32];
     strncpy(buf, cidr, sizeof(buf) - 1);
@@ -421,8 +439,10 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
                 unsigned char peer_pub[DH_PUBKEY_LEN];
                 if (handshake_server_respond(sock_fd, wire_buf, (int)nr, &src_addr,
                                              psk_key, static_key, static_pub,
+                                             precomp_eph_key, precomp_eph_pub,
                                              peer_pub, session_key) < 0)
                     continue;
+                refresh_precomp_eph();
                 peer_config_t *cfg = find_peer_config(peer_pub);
                 if (!cfg) {
                     char hex[DH_PUBKEY_LEN * 2 + 1];
@@ -528,6 +548,7 @@ static void start_peer(char *tunnel, int port, const unsigned char *psk_key,
     }
     LOG_INFO("Listening on UDP 0.0.0.0:%d", port);
 
+    refresh_precomp_eph();
     event_loop(tun_fd, sock_fd, static_key, static_pub, psk_key);
 
     close(sock_fd);

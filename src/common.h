@@ -88,6 +88,7 @@ int open_tunnel(char *tunnel);
 void derive_key(const char *psk, unsigned char *key);
 void bytes_to_hex(const unsigned char *bytes, int len, char *hex_out);
 int hex_to_bytes(const char *hex, unsigned char *bytes_out, int expected_len);
+int generate_eph_keypair(EVP_PKEY **pkey_out, unsigned char *pub_out);
 int load_or_generate_static_key(const char *path, EVP_PKEY **pkey_out, unsigned char *pub_out);
 int load_static_key(const char *path, EVP_PKEY **pkey_out, unsigned char *pub_out);
 int load_public_key(const char *path, unsigned char *pub_out);
@@ -139,6 +140,7 @@ int handshake_server_respond(int sock_fd, const unsigned char *pkt, int pkt_len,
                              struct sockaddr_in *peer_addr,
                              const unsigned char *psk_key,
                              EVP_PKEY *static_key, const unsigned char *static_pub,
+                             EVP_PKEY *precomp_eph_key, const unsigned char *precomp_eph_pub,
                              unsigned char *client_static_pub_out,
                              unsigned char *session_key);
 
