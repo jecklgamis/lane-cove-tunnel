@@ -112,10 +112,10 @@ RELAY_IP=<mac-ip> ./run-peer-2-in-docker.sh
   - **HTTP proxy** on `0.0.0.0:15050` — L7 with upstream connection pooling (~130 requests/connection); eliminates per-request TCP handshake cost through the tunnel; recommended for HTTP workloads
   - Admin interface on `0.0.0.0:9901`
 - `create-peer-tunnel.sh <tunnel> <ip/cidr> [routes...]` — creates TUN interface, assigns overlay IP, disables ICMP redirects
-- `run-relay-in-docker.sh` — fully explicit CLI args; extracts pubkeys from `.crt` files, mounts keys as volumes
+- `run-relay-in-docker.sh` — fully explicit CLI args; extracts pubkeys from `.crt` files, mounts keys as volumes; names container `lane-cove-tunnel-relay`, auto-removes on rerun
 - `run-relay-in-docker-dev.sh` — thin wrapper with defaults for local testing (relay.key/crt, peer-1/2 certs)
-- `run-peer-in-docker.sh` — fully explicit CLI args for running any peer in Docker
-- `run-peer-1-in-docker.sh` / `run-peer-2-in-docker.sh` — thin wrappers with defaults; auto-detect relay IP
+- `run-peer-in-docker.sh` — fully explicit CLI args for running any peer in Docker; supports `--name` for container naming, auto-removes on rerun
+- `run-peer-1-in-docker.sh` / `run-peer-2-in-docker.sh` — thin wrappers; auto-detect relay IP, name containers `lane-cove-tunnel-peer-1` / `lane-cove-tunnel-peer-2`
 - `run-as-relay.sh` / `run-as-peer.sh` — native Linux wrappers; take `.crt` files and extract pubkeys internally
 - `test-tunnel.sh <container> <target_ip>` — ping + curl target through tunnel from a container
 - `exec-shell.sh <container>` — open a bash shell in a running container

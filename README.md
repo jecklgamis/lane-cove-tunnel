@@ -202,6 +202,9 @@ $ ./exec-shell-to-peer-2-container.sh
 # Generic — test any container/target or open a shell
 $ ./test-tunnel.sh lane-cove-tunnel-peer-1 10.9.0.3
 $ ./exec-shell.sh lane-cove-tunnel-peer-1
+
+# Shell into relay
+$ ./exec-shell.sh lane-cove-tunnel-relay
 ```
 
 ### Running Natively (Linux)

@@ -43,6 +43,7 @@ PEER_CRT=""
 PEER_IP=""
 HOST_PORT=""
 PEER_PORT=5040
+CONTAINER_NAME=""
 ENVOY_UPSTREAM_HOST=""
 ENVOY_UPSTREAM_PORT=80
 TCP_PROXY_PORT=""
@@ -64,6 +65,7 @@ while [[ $# -gt 0 ]]; do
         --tcp-proxy-port)   TCP_PROXY_PORT="$2"; shift 2 ;;
         --http-proxy-port)  HTTP_PROXY_PORT="$2"; shift 2 ;;
         --admin-port)       ADMIN_PORT="$2"; shift 2 ;;
+        --name)             CONTAINER_NAME="$2"; shift 2 ;;
         -v)                 VERBOSE="-v"; shift ;;
         -p)
             IFS=':' read -r crt_file endpoint_host endpoint_port allowed_ips <<< "$2"
@@ -105,7 +107,14 @@ ENVOY_ARGS=()
     -e "ENVOY_UPSTREAM_PORT=${ENVOY_UPSTREAM_PORT}"
 )
 
+NAME_ARG=()
+if [[ -n "$CONTAINER_NAME" ]]; then
+    NAME_ARG=(--name "$CONTAINER_NAME")
+    docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+fi
+
 docker run \
+  "${NAME_ARG[@]}" \
   --cap-add=NET_ADMIN \
   --device=/dev/net/tun \
   -v "$(pwd)/${PEER_KEY}:/app/peer.key:ro" \

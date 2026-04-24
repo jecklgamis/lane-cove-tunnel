@@ -31,6 +31,7 @@ PEER_KEY=""
 PEER_CRT=""
 PEER_IP=""
 PEER_PORT=5040
+CONTAINER_NAME=""
 PEER_ARGS=()
 peer_idx=1
 
@@ -42,6 +43,7 @@ while [[ $# -gt 0 ]]; do
         --peer-ip)  PEER_IP="$2"; shift 2 ;;
         -port)      PEER_PORT="$2"; shift 2 ;;
         -v)         VERBOSE="-v"; shift ;;
+        --name)     CONTAINER_NAME="$2"; shift 2 ;;
         -p)
             IFS=':' read -r crt_file allowed_ips <<< "$2"
             [[ -z "$crt_file" || -z "$allowed_ips" ]] && {
@@ -69,7 +71,14 @@ done
 [[ ! -f "$PEER_KEY" ]]  && { echo "Error: key file not found: $PEER_KEY"; exit 1; }
 [[ ! -f "$PEER_CRT" ]]  && { echo "Error: cert file not found: $PEER_CRT"; exit 1; }
 
+NAME_ARG=()
+if [[ -n "$CONTAINER_NAME" ]]; then
+    NAME_ARG=(--name "$CONTAINER_NAME")
+    docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+fi
+
 docker run \
+  "${NAME_ARG[@]}" \
   --cap-add=NET_ADMIN \
   --device=/dev/net/tun \
   -v "$(pwd)/${PEER_KEY}:/app/peer.key:ro" \

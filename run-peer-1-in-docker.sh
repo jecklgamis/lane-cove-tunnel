@@ -5,6 +5,7 @@ RELAY_IP=${RELAY_IP:-$(detect_local_ip)}
 RELAY_IP=${RELAY_IP:?RELAY_IP could not be determined (set it explicitly)}
 
 exec ./run-peer-in-docker.sh \
+  --name lane-cove-tunnel-peer-1 \
   -i lanecove0 \
   -k peer-1.key \
   -c peer-1.crt \

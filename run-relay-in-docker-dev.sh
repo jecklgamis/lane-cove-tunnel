@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -e
 exec "$(dirname "$0")/run-relay-in-docker.sh" \
+  --name lane-cove-tunnel-relay \
   -i lanecove0 \
   -k relay.key \
   -c relay.crt \
