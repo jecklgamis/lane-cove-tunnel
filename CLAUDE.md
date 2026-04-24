@@ -122,9 +122,9 @@ RELAY_IP=<mac-ip> ./run-peer-2-in-docker.sh
 
 ## CLI Options
 
-### Peer
+### peer binary
 ```
-peer -i <iface> [-p <port>] [-K <keyfile>] -P <pubkey_hex> [-E <ip:port>] [-R <cidr>] [...] [-k <psk>] [-v]
+peer -i <iface> [-p <port>] [-K <keyfile>] -P <pubkey_hex> [-E <ip:port>] [-R <cidr>] [...] [-k <psk>] [-v] [-h]
 ```
 | Option | Description |
 |--------|-------------|
@@ -132,24 +132,47 @@ peer -i <iface> [-p <port>] [-K <keyfile>] -P <pubkey_hex> [-E <ip:port>] [-R <c
 | `-p`   | Listen port (default: 5040) |
 | `-K`   | Static private key PEM file (default: `peer.key`) |
 | `-P`   | Known peer public key hex (repeatable) |
-| `-E`   | Peer endpoint `ip:port` — initiates outbound connection |
-| `-R`   | AllowedIPs CIDR for the preceding `-P` entry (repeatable) |
+| `-E`   | Peer endpoint `ip:port` — initiates outbound; must follow `-P` |
+| `-R`   | AllowedIPs CIDR for the preceding `-P` (repeatable; must follow `-P`) |
 | `-k`   | Pre-shared key for handshake HMAC authentication |
 | `-v`   | Verbose / debug logging |
+| `-h`   | Show help |
+
+### run-as-relay.sh
+```
+run-as-relay.sh -i <tunnel> -k <keyfile> -p <crt:cidr> [-p ...] [-port <port>] [-v]
+```
+
+### run-as-peer.sh
+```
+run-as-peer.sh -i <tunnel> -k <keyfile> -p <crt:host:port:cidr> [-p ...] [-port <port>] [-v]
+```
+
+### run-relay-in-docker.sh
+```
+run-relay-in-docker.sh -i <tunnel> -k <keyfile> -c <crtfile> --peer-ip <ip/cidr> -p <crt:cidr> [-p ...] [--name <name>] [-port <port>] [-v]
+```
+
+### run-peer-in-docker.sh
+```
+run-peer-in-docker.sh -i <tunnel> -k <keyfile> -c <crtfile> --peer-ip <ip/cidr> --host-port <port> -p <crt:host:port:cidr> [-p ...] [--name <name>] [--envoy-upstream <host>] [--tcp-proxy-port <port>] [--http-proxy-port <port>] [--admin-port <port>] [-port <port>] [-v]
+```
 
 ## Tunnel Interface
 - Interface name: `lanecove0`
 - Overlay network: `10.9.0.0/24` (relay=`10.9.0.1`, peer-1=`10.9.0.2`, peer-2=`10.9.0.3`)
 
-## Key Environment Variables
+## Docker Environment Variables
+Consumed by `docker-entrypoint-peer.sh`:
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TUNNEL_NAME` | `lanecove0` | TUN interface name |
 | `PEER_PORT` | `5040` | Listen port |
-| `PEER_IP` | `10.9.0.1/24` | This peer's overlay IP |
-| `PEER_ROUTES` | _(none)_ | Space-separated CIDRs to route via TUN |
+| `PEER_IP` | `10.9.0.1/24` | This peer's overlay IP/CIDR |
+| `PEER_ROUTES` | _(none)_ | Space-separated extra CIDRs to route via TUN |
 | `PEER_PUB_n` | — | Known peer public key hex |
-| `PEER_ENDPOINT_n` | — | Peer endpoint `ip:port` |
+| `PEER_ENDPOINT_n` | — | Peer endpoint `ip:port` (triggers outbound connection) |
 | `PEER_ALLOWED_IPS_n` | — | AllowedIPs CIDR(s) for peer n |
 | `ENVOY_UPSTREAM_HOST` | — | Upstream host for Envoy proxy; if unset, Envoy is not started |
 | `ENVOY_UPSTREAM_PORT` | `80` | Upstream port for Envoy proxy |

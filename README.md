@@ -145,11 +145,6 @@ By default:
 - peer-1 proxies to `10.9.0.3:80` (peer-2's nginx), exposed on host ports `15042` (TCP), `15052` (HTTP), `9901` (admin)
 - peer-2 proxies to `10.9.0.2:80` (peer-1's nginx), exposed on host ports `15043` (TCP), `15053` (HTTP), `9902` (admin)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ENVOY_UPSTREAM_HOST` | — | Upstream host; if unset, Envoy is not started |
-| `ENVOY_UPSTREAM_PORT` | `80` | Upstream port |
-
 ```bash
 # HTTP proxy through peer-1's Envoy to peer-2's nginx (recommended)
 $ curl http://localhost:15052
@@ -235,7 +230,7 @@ $ ./run-as-peer.sh -i lanecove0 -k peer-2.key \
 ### Peer CLI Options
 
 ```
-peer -i <iface> [-p <port>] [-K <keyfile>] -P <pubkey_hex> [-E <ip:port>] [-R <cidr>] [...] [-k <psk>] [-v]
+peer -i <iface> [-p <port>] [-K <keyfile>] -P <pubkey_hex> [-E <ip:port>] [-R <cidr>] [...] [-k <psk>] [-v] [-h]
 ```
 
 | Option | Description |
@@ -244,22 +239,39 @@ peer -i <iface> [-p <port>] [-K <keyfile>] -P <pubkey_hex> [-E <ip:port>] [-R <c
 | `-p`   | Listen port (default: 5040) |
 | `-K`   | Static private key PEM file (default: `peer.key`) |
 | `-P`   | Known peer public key hex (repeatable) |
-| `-E`   | Peer endpoint `ip:port` — if set, initiate outbound connection |
-| `-R`   | AllowedIPs CIDR for the preceding `-P` entry (repeatable) |
+| `-E`   | Peer endpoint `ip:port` — initiates outbound connection; must follow `-P` |
+| `-R`   | AllowedIPs CIDR for the preceding `-P` entry (repeatable; must follow `-P`) |
 | `-k`   | Pre-shared key for handshake HMAC authentication |
 | `-v`   | Verbose / debug logging |
+| `-h`   | Show help |
+
+### Wrapper Scripts
+
+| Script | Description |
+|--------|-------------|
+| `run-as-relay.sh -i <tunnel> -k <key> -p <crt:cidr> [...]` | Run as relay (native Linux) |
+| `run-as-peer.sh -i <tunnel> -k <key> -p <crt:host:port:cidr> [...]` | Run as peer (native Linux) |
+| `run-relay-in-docker.sh -i <tunnel> -k <key> -c <crt> --peer-ip <ip/cidr> -p <crt:cidr> [...]` | Run relay in Docker |
+| `run-relay-in-docker-dev.sh` | Run relay in Docker with dev defaults |
+| `run-peer-in-docker.sh -i <tunnel> -k <key> -c <crt> --peer-ip <ip/cidr> --host-port <port> -p <crt:host:port:cidr> [...]` | Run peer in Docker |
+| `run-peer-1-in-docker.sh` | Run peer-1 in Docker with dev defaults |
+| `run-peer-2-in-docker.sh` | Run peer-2 in Docker with dev defaults |
 
 ### Peer Environment Variables
+
+These are consumed by `docker-entrypoint-peer.sh` when running in Docker:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TUNNEL_NAME` | `lanecove0` | TUN interface name |
 | `PEER_PORT` | `5040` | Listen port |
-| `PEER_IP` | `10.9.0.1/24` | This peer's overlay IP |
-| `PEER_ROUTES` | _(none)_ | Space-separated CIDRs to route via TUN |
+| `PEER_IP` | `10.9.0.1/24` | This peer's overlay IP/CIDR |
+| `PEER_ROUTES` | _(none)_ | Space-separated extra CIDRs to route via TUN |
 | `PEER_PUB_n` | — | Known peer public key hex |
-| `PEER_ENDPOINT_n` | — | Peer endpoint `ip:port` (triggers outbound) |
-| `PEER_ALLOWED_IPS_n` | — | AllowedIPs for peer n |
+| `PEER_ENDPOINT_n` | — | Peer endpoint `ip:port` (triggers outbound connection) |
+| `PEER_ALLOWED_IPS_n` | — | AllowedIPs CIDR(s) for peer n |
+| `ENVOY_UPSTREAM_HOST` | — | Upstream host for Envoy proxy; if unset, Envoy is not started |
+| `ENVOY_UPSTREAM_PORT` | `80` | Upstream port for Envoy proxy |
 
 ---
 
