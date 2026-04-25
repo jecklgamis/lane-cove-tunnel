@@ -24,7 +24,6 @@
 #ifndef UDP_COMMON_H
 #define UDP_COMMON_H
 
-#define BUFFER_SIZE     2048
 #define CRYPTO_KEY_LEN  32
 #define CRYPTO_IV_LEN   12
 #define CRYPTO_TAG_LEN  16
@@ -32,6 +31,8 @@
 #define HEADER_SIZE     8
 #define SEQ_SIZE        8
 #define WIRE_OVERHEAD   (HEADER_SIZE + SEQ_SIZE + CRYPTO_OVERHEAD)
+#define TUN_MTU         (1500 - 20 - 8 - WIRE_OVERHEAD)  /* Ethernet - outer IP - UDP - tunnel overhead = 1428 */
+#define BUFFER_SIZE     2048  /* must be > TUN_MTU */
 #define DH_PUBKEY_LEN   32
 #define HMAC_LEN        32
 
