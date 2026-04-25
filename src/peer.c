@@ -1,3 +1,4 @@
+#include <netdb.h>
 #include <signal.h>
 #include <time.h>
 #include "common.h"
@@ -9,6 +10,7 @@
 #define HANDSHAKE_TIMEOUT_SECS      5
 #define RECONNECT_INTERVAL_SECS    30
 #define SESSION_EXPIRY_SECS       (3 * REKEY_AFTER_SECS)  /* 540s — evict silent inbound peers */
+#define KEEPALIVE_INTERVAL_SECS    25  /* send empty packet if idle; keeps NAT mappings alive */
 #define MAX_PEERS                  64
 #define MAX_ROUTES_PER_PEER        16
 
@@ -25,6 +27,8 @@ typedef struct {
     int                route_count;
     int                has_endpoint;   /* if set, we initiate to this peer */
     struct sockaddr_in endpoint;
+    char               endpoint_host[256]; /* original hostname from -E, for re-resolution */
+    int                endpoint_port;
     time_t             last_attempt;
 } peer_config_t;
 
@@ -38,6 +42,7 @@ typedef struct {
     int                prev_key_active;
     time_t             prev_key_expires;
     time_t             last_seen;
+    time_t             last_sent;
     time_t             last_handshake;
     time_t             rekey_deadline;
     int                rekeying;
@@ -70,11 +75,45 @@ static pending_hs_t   pending_hs[MAX_PEERS];
 static EVP_PKEY      *precomp_eph_key = NULL;
 static unsigned char  precomp_eph_pub[DH_PUBKEY_LEN];
 
-static volatile sig_atomic_t stop_flag = 0;
+static volatile sig_atomic_t stop_flag          = 0;
+static volatile sig_atomic_t print_sessions_flag = 0;
 
 static void handle_signal(int sig) {
-    (void)sig;
-    stop_flag = 1;
+    if (sig == SIGUSR1)
+        print_sessions_flag = 1;
+    else
+        stop_flag = 1;
+}
+
+/* Resolve (or re-resolve) the endpoint hostname and update cfg->endpoint.
+ * Blocking — only called at startup and on rate-limited reconnect attempts. */
+static int resolve_endpoint(peer_config_t *cfg) {
+    char port_str[8];
+    snprintf(port_str, sizeof(port_str), "%d", cfg->endpoint_port);
+
+    struct addrinfo hints = {0};
+    hints.ai_family   = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+
+    struct addrinfo *res = NULL;
+    int rc = getaddrinfo(cfg->endpoint_host, port_str, &hints, &res);
+    if (rc != 0) {
+        LOG_WARN("DNS resolution failed for %s: %s", cfg->endpoint_host, gai_strerror(rc));
+        return -1;
+    }
+
+    struct sockaddr_in new_addr = *(struct sockaddr_in *)res->ai_addr;
+    freeaddrinfo(res);
+
+    if (new_addr.sin_addr.s_addr != cfg->endpoint.sin_addr.s_addr) {
+        char old_ip[INET_ADDRSTRLEN], new_ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &cfg->endpoint.sin_addr, old_ip, sizeof(old_ip));
+        inet_ntop(AF_INET, &new_addr.sin_addr,      new_ip, sizeof(new_ip));
+        LOG_INFO("Endpoint %s re-resolved: %s -> %s:%d",
+                 cfg->endpoint_host, old_ip, new_ip, cfg->endpoint_port);
+    }
+    cfg->endpoint = new_addr;
+    return 0;
 }
 
 static void refresh_precomp_eph(void) {
@@ -186,6 +225,7 @@ static void session_init(peer_session_t *s, struct sockaddr_in *addr,
     }
     memcpy(s->session_key, key, CRYPTO_KEY_LEN);
     s->last_seen = 0;
+    s->last_sent = time(NULL); /* suppress immediate keepalive after handshake */
     s->last_handshake = time(NULL);
     s->rekey_deadline = time(NULL) + REKEY_AFTER_SECS;
     s->rekeying = 0;
@@ -245,14 +285,16 @@ static void forward_to_peer(int sock_fd, peer_session_t *s, EVP_CIPHER_CTX *enc_
     uint64_t seq_be = htobe64(s->send_seq++);
     memcpy(plain_buf, pkt_header, HEADER_SIZE);
     memcpy(plain_buf + HEADER_SIZE, &seq_be, SEQ_SIZE);
-    memcpy(plain_buf + HEADER_SIZE + SEQ_SIZE, payload, payload_len);
+    if (payload_len > 0)
+        memcpy(plain_buf + HEADER_SIZE + SEQ_SIZE, payload, payload_len);
     if (encrypt_packet(enc_ctx, s->session_key, plain_buf, HEADER_SIZE + SEQ_SIZE + payload_len,
                        wire_buf, &enc_len) < 0) {
         LOG_ERROR("Encrypt failed for %s:%d",
                   inet_ntoa(s->addr.sin_addr), ntohs(s->addr.sin_port));
         return;
     }
-    sendto(sock_fd, wire_buf, enc_len, 0, (struct sockaddr *)&s->addr, sizeof(s->addr));
+    if (sendto(sock_fd, wire_buf, enc_len, 0, (struct sockaddr *)&s->addr, sizeof(s->addr)) >= 0)
+        s->last_sent = time(NULL);
 }
 
 /* Send a handshake initiation to an outbound peer and register a pending entry.
@@ -333,6 +375,7 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
                 int needs = !s || (now >= s->last_handshake + REKEY_INITIATE_SECS && !s->rekeying);
                 int ready  = now - cfg->last_attempt >= RECONNECT_INTERVAL_SECS;
                 if (needs && ready) {
+                    resolve_endpoint(cfg); /* refresh DNS; blocking but rate-limited to RECONNECT_INTERVAL_SECS */
                     if (s) s->rekeying = 1;
                     if (initiate_outbound_handshake(sock_fd, i, static_key, static_pub, psk_key) < 0)
                         if (s) s->rekeying = 0;
@@ -366,10 +409,26 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
                          inet_ntoa(s->addr.sin_addr), ntohs(s->addr.sin_port), key_hex);
                 s->active = 0;
             }
+            /* Send keepalive to sessions that have had no outbound traffic recently */
+            for (int j = 0; j < session_slots; j++) {
+                peer_session_t *s = &sessions[j];
+                if (!s->active || now - s->last_sent < KEEPALIVE_INTERVAL_SECS) continue;
+                LOG_DEBUG("Keepalive -> %s:%d",
+                          inet_ntoa(s->addr.sin_addr), ntohs(s->addr.sin_port));
+                forward_to_peer(sock_fd, s, enc_ctx, plain_buf, NULL, 0, wire_buf);
+            }
         }
 
         int nfds = epoll_wait(epoll_fd, events, 2, 5000);
-        if (nfds < 0) { LOG_ERROR("epoll_wait: %s", strerror(errno)); break; }
+        if (nfds < 0) {
+            if (errno == EINTR) continue; /* signal interrupted — recheck stop_flag/print_sessions_flag */
+            LOG_ERROR("epoll_wait: %s", strerror(errno)); break;
+        }
+
+        if (print_sessions_flag) {
+            print_sessions_flag = 0;
+            print_sessions();
+        }
 
         for (int i = 0; i < nfds; i++) {
             if (events[i].events & (EPOLLERR | EPOLLHUP)) {
@@ -586,6 +645,7 @@ static void start_peer(char *tunnel, int port, const unsigned char *psk_key,
 
     signal(SIGTERM, handle_signal);
     signal(SIGINT,  handle_signal);
+    signal(SIGUSR1, handle_signal);
 
     refresh_precomp_eph();
     event_loop(tun_fd, sock_fd, static_key, static_pub, psk_key);
@@ -653,18 +713,27 @@ int main(int argc, char *argv[]) {
                 peer_config_t *pc = &peer_configs[peer_config_count - 1];
                 char buf[256];
                 strncpy(buf, optarg, sizeof(buf) - 1);
+                buf[sizeof(buf) - 1] = '\0';
                 char *colon = strrchr(buf, ':');
                 if (!colon) {
-                    fprintf(stderr, "Invalid endpoint (expected ip:port): %s\n", optarg);
+                    fprintf(stderr, "Invalid endpoint (expected host:port): %s\n", optarg);
                     usage();
                 }
                 *colon = '\0';
+                int eport = atoi(colon + 1);
+                if (eport <= 0 || eport > 65535) {
+                    fprintf(stderr, "Invalid port in endpoint: %s\n", optarg);
+                    usage();
+                }
+                strncpy(pc->endpoint_host, buf, sizeof(pc->endpoint_host) - 1);
+                pc->endpoint_host[sizeof(pc->endpoint_host) - 1] = '\0';
+                pc->endpoint_port = eport;
                 memset(&pc->endpoint, 0, sizeof(pc->endpoint));
                 pc->endpoint.sin_family = AF_INET;
-                pc->endpoint.sin_port = htons(atoi(colon + 1));
-                if (inet_pton(AF_INET, buf, &pc->endpoint.sin_addr) != 1) {
-                    fprintf(stderr, "Invalid endpoint IP: %s\n", buf);
-                    usage();
+                pc->endpoint.sin_port   = htons(eport);
+                if (resolve_endpoint(pc) < 0) {
+                    fprintf(stderr, "Cannot resolve endpoint host: %s\n", buf);
+                    exit(1);
                 }
                 pc->has_endpoint = 1;
                 break;
