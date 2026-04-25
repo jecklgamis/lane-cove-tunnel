@@ -3,7 +3,7 @@
 
 #define REKEY_AFTER_SECS          180
 #define REKEY_INITIATE_SECS       144   /* start rekeying at 80% of interval */
-#define PREV_KEY_GRACE_SECS         5
+#define PREV_KEY_GRACE_SECS        90
 #define HANDSHAKE_COOLDOWN_SECS     5
 #define HANDSHAKE_TIMEOUT_SECS      5
 #define RECONNECT_INTERVAL_SECS    30

@@ -39,7 +39,7 @@ Keys are X25519 key pairs stored in PEM files. Use `generate-peer-keys.sh` to ge
 - Rekeying initiated at 80% of session lifetime (`REKEY_INITIATE_SECS=144`, `REKEY_AFTER_SECS=180`)
 - Handshake is **non-blocking** (async): initiation and response are split across epoll iterations
 - Simultaneous rekey collisions resolved by tie-breaking: higher public key wins
-- **Previous session key grace period** (`PREV_KEY_GRACE_SECS=5`): responder retains old key as decrypt fallback for 5 seconds after rekeying, eliminating packet loss during the initiator's response window
+- **Previous session key grace period** (`PREV_KEY_GRACE_SECS=90`): responder retains old key as decrypt fallback for 90 seconds after rekeying, eliminating packet loss during the initiator's response window (matches WireGuard's overlap window)
 - **Pre-generated ephemeral keypair**: responder pre-generates the next X25519 ephemeral keypair at startup and after each handshake, so keygen never blocks the event loop on the hot path
 
 ### Handshake Wire Format
