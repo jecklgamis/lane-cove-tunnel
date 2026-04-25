@@ -18,7 +18,8 @@ int hex_to_bytes(const char *hex, unsigned char *bytes_out, int expected_len) {
     if ((int) strlen(hex) != expected_len * 2) return -1;
     for (int i = 0; i < expected_len; i++) {
         unsigned int byte;
-        if (sscanf(hex + i * 2, "%02x", &byte) != 1) return -1;
+        int n = 0;
+        if (sscanf(hex + i * 2, "%02x%n", &byte, &n) != 1 || n != 2) return -1;
         bytes_out[i] = (unsigned char) byte;
     }
     return 0;
