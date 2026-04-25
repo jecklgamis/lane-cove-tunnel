@@ -24,14 +24,12 @@ int hex_to_bytes(const char *hex, unsigned char *bytes_out, int expected_len) {
     return 0;
 }
 
-int encrypt_packet(const unsigned char *key, const unsigned char *plain, int plain_len,
+int encrypt_packet(EVP_CIPHER_CTX *ctx, const unsigned char *key,
+                   const unsigned char *plain, int plain_len,
                    unsigned char *out, int *out_len) {
     unsigned char iv[CRYPTO_IV_LEN];
     if (RAND_bytes(iv, CRYPTO_IV_LEN) != 1)
         return -1;
-
-    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-    if (!ctx) return -1;
 
     int len, ciphertext_len;
     unsigned char *ciphertext = out + CRYPTO_IV_LEN;
@@ -46,14 +44,14 @@ int encrypt_packet(const unsigned char *key, const unsigned char *plain, int pla
 
     memcpy(out, iv, CRYPTO_IV_LEN);
     *out_len = CRYPTO_IV_LEN + ciphertext_len + CRYPTO_TAG_LEN;
-    EVP_CIPHER_CTX_free(ctx);
     return 0;
 err:
-    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_CTX_reset(ctx);
     return -1;
 }
 
-int decrypt_packet(const unsigned char *key, const unsigned char *in, int in_len,
+int decrypt_packet(EVP_CIPHER_CTX *ctx, const unsigned char *key,
+                   const unsigned char *in, int in_len,
                    unsigned char *out, int *out_len) {
     if (in_len < CRYPTO_OVERHEAD)
         return -1;
@@ -64,9 +62,6 @@ int decrypt_packet(const unsigned char *key, const unsigned char *in, int in_len
     unsigned char tag[CRYPTO_TAG_LEN];
     memcpy(tag, in + in_len - CRYPTO_TAG_LEN, CRYPTO_TAG_LEN);
 
-    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-    if (!ctx) return -1;
-
     int len, plain_len;
     if (EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, key, iv) != 1) goto err;
     if (EVP_DecryptUpdate(ctx, out, &len, ciphertext, ciphertext_len) != 1) goto err;
@@ -76,10 +71,9 @@ int decrypt_packet(const unsigned char *key, const unsigned char *in, int in_len
     plain_len += len;
 
     *out_len = plain_len;
-    EVP_CIPHER_CTX_free(ctx);
     return 0;
 err:
-    EVP_CIPHER_CTX_free(ctx);
+    EVP_CIPHER_CTX_reset(ctx);
     return -1;
 }
 
@@ -405,8 +399,8 @@ int handshake_client_recv(const unsigned char *resp, int resp_len,
         unsigned char expected_hmac[HMAC_LEN];
         if (compute_hmac(psk_key, resp + HEADER_SIZE, DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN,
                          expected_hmac) < 0 ||
-            memcmp(resp + HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN,
-                   expected_hmac, HMAC_LEN) != 0) {
+            CRYPTO_memcmp(resp + HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN,
+                          expected_hmac, HMAC_LEN) != 0) {
             LOG_ERROR("Server handshake HMAC verification failed — possible MITM");
             return -1;
         }
@@ -475,8 +469,8 @@ int handshake_server_respond(int sock_fd, const unsigned char *pkt, int pkt_len,
         unsigned char expected_hmac[HMAC_LEN];
         if (compute_hmac(psk_key, pkt + HEADER_SIZE, DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN,
                          expected_hmac) < 0 ||
-            memcmp(pkt + HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN,
-                   expected_hmac, HMAC_LEN) != 0) {
+            CRYPTO_memcmp(pkt + HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN,
+                          expected_hmac, HMAC_LEN) != 0) {
             LOG_ERROR("Client handshake HMAC verification failed — rejecting");
             return -1;
         }

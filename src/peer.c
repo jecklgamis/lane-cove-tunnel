@@ -1,3 +1,4 @@
+#include <signal.h>
 #include <time.h>
 #include "common.h"
 
@@ -7,6 +8,7 @@
 #define HANDSHAKE_COOLDOWN_SECS     5
 #define HANDSHAKE_TIMEOUT_SECS      5
 #define RECONNECT_INTERVAL_SECS    30
+#define SESSION_EXPIRY_SECS       (3 * REKEY_AFTER_SECS)  /* 540s — evict silent inbound peers */
 #define MAX_PEERS                  64
 #define MAX_ROUTES_PER_PEER        16
 
@@ -68,6 +70,13 @@ static pending_hs_t   pending_hs[MAX_PEERS];
 static EVP_PKEY      *precomp_eph_key = NULL;
 static unsigned char  precomp_eph_pub[DH_PUBKEY_LEN];
 
+static volatile sig_atomic_t stop_flag = 0;
+
+static void handle_signal(int sig) {
+    (void)sig;
+    stop_flag = 1;
+}
+
 static void refresh_precomp_eph(void) {
     EVP_PKEY *old = precomp_eph_key;
     EVP_PKEY *nk  = NULL;
@@ -126,7 +135,7 @@ static peer_session_t *find_session_by_pub(const unsigned char *pub) {
 /* Returns an existing slot (by pub first, then addr), falls back to a free slot */
 static peer_session_t *alloc_session(const unsigned char *pub, struct sockaddr_in *addr) {
     for (int i = 0; i < session_slots; i++)
-        if (memcmp(sessions[i].static_pub, pub, DH_PUBKEY_LEN) == 0)
+        if (sessions[i].active && memcmp(sessions[i].static_pub, pub, DH_PUBKEY_LEN) == 0)
             return &sessions[i];
     peer_session_t *s = find_session_by_addr(addr);
     if (s) return s;
@@ -229,7 +238,7 @@ static void print_sessions(void) {
     }
 }
 
-static void forward_to_peer(int sock_fd, peer_session_t *s,
+static void forward_to_peer(int sock_fd, peer_session_t *s, EVP_CIPHER_CTX *enc_ctx,
                             unsigned char *plain_buf, const unsigned char *payload,
                             int payload_len, unsigned char *wire_buf) {
     int enc_len;
@@ -237,7 +246,7 @@ static void forward_to_peer(int sock_fd, peer_session_t *s,
     memcpy(plain_buf, pkt_header, HEADER_SIZE);
     memcpy(plain_buf + HEADER_SIZE, &seq_be, SEQ_SIZE);
     memcpy(plain_buf + HEADER_SIZE + SEQ_SIZE, payload, payload_len);
-    if (encrypt_packet(s->session_key, plain_buf, HEADER_SIZE + SEQ_SIZE + payload_len,
+    if (encrypt_packet(enc_ctx, s->session_key, plain_buf, HEADER_SIZE + SEQ_SIZE + payload_len,
                        wire_buf, &enc_len) < 0) {
         LOG_ERROR("Encrypt failed for %s:%d",
                   inet_ntoa(s->addr.sin_addr), ntohs(s->addr.sin_port));
@@ -293,6 +302,15 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
     time_t last_rekey_check = 0;
     int hs_size = HEADER_SIZE + DH_PUBKEY_LEN + HS_ENCRYPTED_PUB_LEN + (psk_key ? HMAC_LEN : 0);
 
+    EVP_CIPHER_CTX *enc_ctx = EVP_CIPHER_CTX_new();
+    EVP_CIPHER_CTX *dec_ctx = EVP_CIPHER_CTX_new();
+    if (!enc_ctx || !dec_ctx) {
+        LOG_ERROR("Failed to allocate cipher contexts");
+        EVP_CIPHER_CTX_free(enc_ctx);
+        EVP_CIPHER_CTX_free(dec_ctx);
+        return;
+    }
+
     int epoll_fd = epoll_create1(0);
     if (epoll_fd < 0) { LOG_ERROR("epoll_create1: %s", strerror(errno)); return; }
 
@@ -303,7 +321,7 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
     ev.data.fd = sock_fd;
     epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sock_fd, &ev);
 
-    while (1) {
+    while (!stop_flag) {
         /* Periodically check whether outbound peers need (re)connecting */
         time_t now = time(NULL);
         if (now - last_rekey_check >= 10) {
@@ -335,6 +353,19 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
                 peer_session_t *ts = find_session_by_pub(peer_configs[p->cfg_idx].pub);
                 if (ts) ts->rekeying = 0;
             }
+            /* Expire sessions that have been silent for too long */
+            for (int j = 0; j < session_slots; j++) {
+                peer_session_t *s = &sessions[j];
+                if (!s->active) continue;
+                time_t ref = s->last_seen > 0 ? s->last_seen : s->last_handshake;
+                if (now - ref <= SESSION_EXPIRY_SECS) continue;
+                char key_hex[17];
+                bytes_to_hex(s->static_pub, 8, key_hex);
+                LOG_INFO("Session expired (no traffic for %ds): %s:%d key=%s...",
+                         (int)(now - ref),
+                         inet_ntoa(s->addr.sin_addr), ntohs(s->addr.sin_port), key_hex);
+                s->active = 0;
+            }
         }
 
         int nfds = epoll_wait(epoll_fd, events, 2, 5000);
@@ -354,7 +385,7 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
                     uint32_t dst_ip = ntohl(*(uint32_t *)(buffer + 16));
                     peer_session_t *s = route_lookup(dst_ip);
                     if (s)
-                        forward_to_peer(sock_fd, s, plain_buf, buffer, (int)nr, wire_buf);
+                        forward_to_peer(sock_fd, s, enc_ctx, plain_buf, buffer, (int)nr, wire_buf);
                     else {
                         struct in_addr a = { htonl(dst_ip) };
                         LOG_DEBUG("No route for %s — dropping", inet_ntoa(a));
@@ -476,11 +507,11 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
             s->last_seen = now;
             int plain_len;
             int dec_ok = 0;
-            if (decrypt_packet(s->session_key, wire_buf, (int)nr, plain_buf, &plain_len) == 0) {
+            if (decrypt_packet(dec_ctx, s->session_key, wire_buf, (int)nr, plain_buf, &plain_len) == 0) {
                 dec_ok = 1;
                 s->prev_key_active = 0;
             } else if (s->prev_key_active && now <= s->prev_key_expires) {
-                if (decrypt_packet(s->prev_session_key, wire_buf, (int)nr, plain_buf, &plain_len) == 0)
+                if (decrypt_packet(dec_ctx, s->prev_session_key, wire_buf, (int)nr, plain_buf, &plain_len) == 0)
                     dec_ok = 1;
             }
             if (!dec_ok) {
@@ -520,8 +551,13 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
         }
     }
 done:
+    EVP_CIPHER_CTX_free(enc_ctx);
+    EVP_CIPHER_CTX_free(dec_ctx);
     close(epoll_fd);
-    LOG_INFO("Event loop terminated");
+    if (stop_flag)
+        LOG_INFO("Caught signal — shutting down");
+    else
+        LOG_INFO("Event loop terminated");
 }
 
 static void start_peer(char *tunnel, int port, const unsigned char *psk_key,
@@ -547,6 +583,9 @@ static void start_peer(char *tunnel, int port, const unsigned char *psk_key,
         exit(EXIT_FAILURE);
     }
     LOG_INFO("Listening on UDP 0.0.0.0:%d", port);
+
+    signal(SIGTERM, handle_signal);
+    signal(SIGINT,  handle_signal);
 
     refresh_precomp_eph();
     event_loop(tun_fd, sock_fd, static_key, static_pub, psk_key);

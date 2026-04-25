@@ -17,6 +17,7 @@
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <openssl/hmac.h>
+#include <openssl/crypto.h>
 #include <endian.h>
 #include <stdint.h>
 
@@ -92,9 +93,11 @@ int generate_eph_keypair(EVP_PKEY **pkey_out, unsigned char *pub_out);
 int load_or_generate_static_key(const char *path, EVP_PKEY **pkey_out, unsigned char *pub_out);
 int load_static_key(const char *path, EVP_PKEY **pkey_out, unsigned char *pub_out);
 int load_public_key(const char *path, unsigned char *pub_out);
-int encrypt_packet(const unsigned char *key, const unsigned char *plain, int plain_len,
+int encrypt_packet(EVP_CIPHER_CTX *ctx, const unsigned char *key,
+                   const unsigned char *plain, int plain_len,
                    unsigned char *out, int *out_len);
-int decrypt_packet(const unsigned char *key, const unsigned char *in, int in_len,
+int decrypt_packet(EVP_CIPHER_CTX *ctx, const unsigned char *key,
+                   const unsigned char *in, int in_len,
                    unsigned char *out, int *out_len);
 
 /*
