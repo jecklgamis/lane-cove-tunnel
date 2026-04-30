@@ -44,18 +44,36 @@ make clean      # remove peer binary
 
 ## Configuration
 
-The `peer` binary is configured via a YAML file:
+The `peer` binary is configured via a YAML file. Sample configs are in `config/`.
 
+**Relay** (`config/relay.yaml`) — inbound-only, no `endpoint`:
 ```yaml
 interface: lanecove0
 port: 5040
-private_key_file: /path/to/peer.key
+private_key_file: /lanecove/relay.key
 pre_shared_key: some-psk
 verbose: false
 
 peers:
-  - public_key: <hex>
-    endpoint: 1.2.3.4:5040   # omit for inbound-only (relay) peers
+  - public_key: <peer-1-pubkey-hex>
+    allowed_ips:
+      - 10.9.0.2/32
+  - public_key: <peer-2-pubkey-hex>
+    allowed_ips:
+      - 10.9.0.3/32
+```
+
+**Peer** (`config/peer-1.yaml`) — connects outbound to relay:
+```yaml
+interface: lanecove0
+port: 5040
+private_key_file: /lanecove/peer-1.key
+pre_shared_key: some-psk
+verbose: false
+
+peers:
+  - public_key: <relay-pubkey-hex>
+    endpoint: <relay-host-or-ip>:5040
     allowed_ips:
       - 10.9.0.0/24
 ```
@@ -78,8 +96,6 @@ peers:
 | `public_key` | Yes | Peer's X25519 public key (hex-encoded) |
 | `endpoint` | No | `host:port` to connect to; omit for inbound-only peers (e.g. relay) |
 | `allowed_ips` | Yes | List of CIDR prefixes allowed from this peer (used for routing and source validation) |
-
-Sample configs for local testing are in `config/`.
 
 ## Key Generation
 
