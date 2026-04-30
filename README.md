@@ -161,6 +161,7 @@ make image
 
 **Shell access:**
 ```bash
+./scripts/exec-shell-to-relay-container.sh
 ./scripts/exec-shell-to-peer-1-container.sh
 ./scripts/exec-shell-to-peer-2-container.sh
 ```
