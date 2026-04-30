@@ -110,6 +110,7 @@ make all          # compile peer binary
 make image        # build Docker image (lane-cove-tunnel-peer:latest)
 make run-shell    # open a bash shell in a fresh container
 make deb          # build .deb package (output: build/lanecove-tunnel_1.0.0_amd64.deb)
+make rpm          # build .rpm package (output: build/rpm/RPMS/)
 make clean        # remove compiled binary and build artifacts
 ```
 

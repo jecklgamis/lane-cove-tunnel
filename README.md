@@ -68,6 +68,7 @@ sudo apt install gcc make iproute2 libssl-dev libyaml-dev
 make all        # build peer binary
 make image      # build Docker image (lane-cove-tunnel-peer:latest)
 make deb        # build .deb package (output: build/lanecove-tunnel_1.0.0_amd64.deb)
+make rpm        # build .rpm package (output: build/rpm/RPMS/)
 make clean      # remove peer binary and build artifacts
 ```
 
@@ -260,6 +261,34 @@ sudo systemctl enable --now lanecove-peer-2   # peer-2 machine
 To uninstall:
 ```bash
 sudo dpkg -r lanecove-tunnel
+```
+
+## Installing via .rpm Package (Red Hat / Fedora / CentOS)
+
+Build and install the package on each machine:
+
+```bash
+make rpm
+sudo rpm -i build/rpm/RPMS/x86_64/lanecove-tunnel-1.0.0-1.x86_64.rpm
+```
+
+Edit the config for the role this machine will play:
+```bash
+sudo vi /etc/lanecove/relay.yaml    # on the relay machine
+sudo vi /etc/lanecove/peer-1.yaml   # on peer-1 machine
+sudo vi /etc/lanecove/peer-2.yaml   # on peer-2 machine
+```
+
+Enable and start the appropriate service:
+```bash
+sudo systemctl enable --now lanecove-relay    # relay machine
+sudo systemctl enable --now lanecove-peer-1   # peer-1 machine
+sudo systemctl enable --now lanecove-peer-2   # peer-2 machine
+```
+
+To uninstall:
+```bash
+sudo rpm -e lanecove-tunnel
 ```
 
 ## Running Natively (Linux)

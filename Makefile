@@ -12,6 +12,13 @@ run-shell:
 	@docker run -it --entrypoint /bin/bash $(DOCKER_IMAGE)
 run:
 	@docker run --rm 	--name lane-cove-tunnel-peer -it $(DOCKER_IMAGE)
+rpm: all
+	mkdir -p build/rpm/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+	rpmbuild -bb \
+		--define "_topdir $(CURDIR)/build/rpm" \
+		--define "_sourcedir $(CURDIR)" \
+		rpm/lanecove-tunnel.spec
+	@echo "Package built: $$(find build/rpm/RPMS -name '*.rpm')"
 deb: all
 	rm -rf $(DEB_ROOT)
 	mkdir -p $(DEB_ROOT)/DEBIAN
