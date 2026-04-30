@@ -9,6 +9,24 @@ It creates a virtual IP network (`10.9.0.0/24`) layered on top of an existing un
 
 The topology is **hub-and-spoke**: peers behind NAT connect outbound to a relay with a public IP, and all traffic between peers transits through the relay. The relay forwards packets between peers in user space — no kernel IP forwarding required. Peers do not connect directly to each other (no NAT hole-punching).
 
+```
+                        ┌─────────────────────────┐
+                        │  relay (public IP)       │
+                        │  overlay: 10.9.0.1       │
+                        │  UDP :5040               │
+                        └────────────┬────────────┘
+                                     │
+                    ┌────────────────┴────────────────┐
+                    │ UDP (encrypted)                  │ UDP (encrypted)
+                    │                                  │
+        ┌───────────┴──────────┐          ┌───────────┴──────────┐
+        │  peer-1 (behind NAT) │          │  peer-2 (behind NAT) │
+        │  overlay: 10.9.0.2   │          │  overlay: 10.9.0.3   │
+        └──────────────────────┘          └──────────────────────┘
+```
+
+Peers communicate with each other via the relay — traffic from peer-1 to peer-2 travels peer-1 → relay → peer-2.
+
 ## Common Use Cases
 
 - **Connecting peers behind NAT** — machines that can't reach each other directly (home networks, cloud VMs, mobile) communicate securely through a relay with a public IP.
