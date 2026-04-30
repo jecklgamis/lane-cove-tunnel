@@ -63,11 +63,26 @@ peers:
       - 10.9.0.3/32
 ```
 
-**Peer** (`config/peer-1.yaml`) — connects outbound to relay:
+**Peer 1** (`config/peer-1.yaml`) — connects outbound to relay:
 ```yaml
 interface: lanecove0
 port: 5040
 private_key_file: /lanecove/peer-1.key
+pre_shared_key: some-psk
+verbose: false
+
+peers:
+  - public_key: <relay-pubkey-hex>
+    endpoint: <relay-host-or-ip>:5040
+    allowed_ips:
+      - 10.9.0.0/24
+```
+
+**Peer 2** (`config/peer-2.yaml`) — same as peer-1 with its own key:
+```yaml
+interface: lanecove0
+port: 5040
+private_key_file: /lanecove/peer-2.key
 pre_shared_key: some-psk
 verbose: false
 
