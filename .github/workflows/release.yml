@@ -7,7 +7,14 @@ on:
 
 jobs:
   build-deb:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
@@ -15,7 +22,7 @@ jobs:
         run: sudo apt-get install -y libssl-dev libyaml-dev
 
       - name: Build deb
-        run: make deb
+        run: make deb DEB_ARCH=${{ matrix.arch }}
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -23,7 +30,14 @@ jobs:
           files: build/*.deb
 
   build-rpm:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 

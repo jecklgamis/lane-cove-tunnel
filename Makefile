@@ -1,6 +1,7 @@
 DOCKER_IMAGE:=lane-cove-tunnel-peer:latest
 DEB_VERSION:=1.0.0
-DEB_PKG:=lanecove-tunnel_$(DEB_VERSION)_amd64
+DEB_ARCH?=amd64
+DEB_PKG:=lanecove-tunnel_$(DEB_VERSION)_$(DEB_ARCH)
 DEB_ROOT:=build/$(DEB_PKG)
 
 all:
@@ -34,7 +35,7 @@ deb: all
 	install -m 640 config/relay.yaml $(DEB_ROOT)/etc/lanecove/relay.yaml
 	install -m 640 config/peer-1.yaml $(DEB_ROOT)/etc/lanecove/peer-1.yaml
 	install -m 640 config/peer-2.yaml $(DEB_ROOT)/etc/lanecove/peer-2.yaml
-	install -m 644 debian/control $(DEB_ROOT)/DEBIAN/control
+	sed "s/^Architecture:.*/Architecture: $(DEB_ARCH)/" debian/control > $(DEB_ROOT)/DEBIAN/control
 	install -m 755 debian/postinst $(DEB_ROOT)/DEBIAN/postinst
 	install -m 755 debian/prerm $(DEB_ROOT)/DEBIAN/prerm
 	dpkg-deb --build $(DEB_ROOT) build/$(DEB_PKG).deb
