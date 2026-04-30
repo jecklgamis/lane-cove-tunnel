@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+
+for svc in lanecove-relay lanecove-peer-1 lanecove-peer-2; do
+    if systemctl is-active --quiet "$svc"; then
+        systemctl stop "$svc"
+    fi
+    if systemctl is-enabled --quiet "$svc" 2>/dev/null; then
+        systemctl disable "$svc"
+    fi
+done

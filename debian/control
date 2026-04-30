@@ -1,0 +1,11 @@
+Package: lanecove-tunnel
+Version: 1.0.0
+Section: net
+Priority: optional
+Architecture: amd64
+Depends: iproute2, libssl3, libyaml-0-2
+Maintainer: Jerrico Gamis <jecklgamis@gmail.com>
+Description: Hub-and-spoke layer 3 overlay network over UDP
+ A simple Linux VPN using a TUN virtual interface and UDP transport.
+ Implements X25519 key exchange, AES-256-GCM encryption, identity hiding,
+ AllowedIPs routing, replay protection, and session rekeying.

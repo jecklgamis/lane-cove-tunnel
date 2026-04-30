@@ -109,7 +109,8 @@ Custom `fprintf`-based logging defined in `common.h`. Global `log_level` variabl
 make all          # compile peer binary
 make image        # build Docker image (lane-cove-tunnel-peer:latest)
 make run-shell    # open a bash shell in a fresh container
-make clean        # remove compiled binary
+make deb          # build .deb package (output: build/lanecove-tunnel_1.0.0_amd64.deb)
+make clean        # remove compiled binary and build artifacts
 ```
 
 ## Running With Docker

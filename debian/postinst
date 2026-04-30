@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+
+systemctl daemon-reload
+
+echo "Lane Cove Tunnel installed."
+echo ""
+echo "Edit configs in /etc/lanecove/, then enable the appropriate service:"
+echo "  systemctl enable --now lanecove-relay    # on the relay machine"
+echo "  systemctl enable --now lanecove-peer-1   # on peer-1 machine"
+echo "  systemctl enable --now lanecove-peer-2   # on peer-2 machine"
