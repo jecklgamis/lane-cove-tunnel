@@ -85,6 +85,9 @@ make image
 ```
 
 **Local testing (all on one machine — 3 terminals):**
+
+> Before running, update the `endpoint` in `config/peer-1.yaml` and `config/peer-2.yaml` to point to your relay's host or IP address.
+
 ```bash
 ./scripts/run-relay-in-docker.sh
 ./scripts/run-peer-1-in-docker.sh
@@ -150,6 +153,9 @@ The `peer` binary can run as a non-root user if the TUN interface is pre-created
 ```bash
 # Generate keys (once)
 ./scripts/generate-peer-keys.sh relay peer-1 peer-2
+
+# Update the `endpoint` in config/peer-1.yaml and config/peer-2.yaml
+# to point to your relay's host or IP address before starting peers.
 
 # Relay — set up TUN and start
 sudo ./scripts/create-peer-tunnel.sh lanecove0 10.9.0.1/24
