@@ -6,7 +6,43 @@ on:
       - 'v*'
 
 jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate commit summary
+        id: commits
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${{ github.ref_name }}$" | head -1)
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="$PREV_TAG..${{ github.ref_name }}"
+          else
+            RANGE="${{ github.ref_name }}"
+          fi
+          NOTES=$(git log "$RANGE" --pretty=format:"- %s (%h)" --no-merges)
+          echo "PREV_TAG=$PREV_TAG" >> $GITHUB_ENV
+          {
+            echo 'NOTES<<EOF'
+            echo "$NOTES"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+      - name: Create release
+        id: create
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            ## Changes since ${{ env.PREV_TAG }}
+
+            ${{ env.NOTES }}
+
   build-deb:
+    needs: create-release
     strategy:
       matrix:
         include:
@@ -30,6 +66,7 @@ jobs:
           files: build/*.deb
 
   build-rpm:
+    needs: create-release
     strategy:
       matrix:
         include:
