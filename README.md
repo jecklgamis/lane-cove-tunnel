@@ -182,11 +182,10 @@ The `peer` binary can run as a non-root user if the TUN interface is pre-created
 # Update the `endpoint` in config/peer-1.yaml and config/peer-2.yaml
 # to point to your relay's host or IP address before starting peers.
 
-# Relay — set up TUN and start
-sudo ./scripts/create-peer-tunnel.sh lanecove0 10.9.0.1/24
-./peer -c config/relay.yaml
+# Relay
+./scripts/run-relay.sh
 
-# peer-1 (handles TUN setup automatically via sudo)
+# peer-1
 ./scripts/run-peer-1.sh
 
 # peer-2

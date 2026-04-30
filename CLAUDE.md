@@ -134,6 +134,7 @@ make image
   - **HTTP proxy** on `0.0.0.0:15050` — L7 with upstream connection pooling (~130 requests/connection); eliminates per-request TCP handshake cost through the tunnel; recommended for HTTP workloads
   - Admin interface on `0.0.0.0:9901`
 - `scripts/create-peer-tunnel.sh <tunnel> <ip/cidr> [routes...]` — creates TUN interface, assigns overlay IP, disables ICMP redirects
+- `scripts/run-relay.sh` — native Linux wrapper: creates TUN (`lanecove0`, `10.9.0.1/24`) and starts relay from `config/relay.yaml`
 - `scripts/run-relay-in-docker.sh` — runs relay container from `config/relay.yaml`; mounts key, exposes UDP 5040 and Envoy admin 9901
 - `scripts/run-peer-1-in-docker.sh` — runs peer-1 container from `config/peer-1.yaml`; mounts key, exposes ports for UDP tunnel, Envoy TCP/HTTP proxy, and admin
 - `scripts/run-peer-2-in-docker.sh` — same as peer-1 but for peer-2
