@@ -18,8 +18,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY nginx-keepalive.conf /etc/nginx/conf.d/keepalive.conf
-COPY scripts/docker-entrypoint.sh scripts/create-peer-tunnel.sh envoy.yaml.tmpl index.html.tmpl ./
+COPY config/nginx-keepalive.conf /etc/nginx/conf.d/keepalive.conf
+COPY scripts/docker-entrypoint.sh scripts/create-peer-tunnel.sh config/envoy.yaml.tmpl config/index.html.tmpl ./
 COPY --from=builder /app/peer ./
 COPY config/ ./config/
 
