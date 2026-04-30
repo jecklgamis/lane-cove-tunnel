@@ -2,8 +2,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG_ABS="${SCRIPT_DIR}/config/relay.yaml"
-CONFIG_DIR="${SCRIPT_DIR}/config"
+CONFIG_ABS="${SCRIPT_DIR}/../config/relay.yaml"
+CONFIG_DIR="${SCRIPT_DIR}/../config"
 
 KEY_CONTAINER=$(python3 -c "import yaml; cfg=yaml.safe_load(open('${CONFIG_ABS}')); print(cfg.get('private_key_file','peer.key'))")
 KEY_HOST="${CONFIG_DIR}/$(basename "$KEY_CONTAINER")"
