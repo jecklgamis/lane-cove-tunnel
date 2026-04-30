@@ -164,21 +164,6 @@ sudo ./scripts/create-peer-tunnel.sh lanecove0 10.9.0.1/24
 
 `create-peer-tunnel.sh` creates the TUN interface owned by the calling user (`$SUDO_USER`), so `peer` can open it without `CAP_NET_ADMIN`.
 
-## Performance
-
-Measured using [gatling-scala-example](https://github.com/jecklgamis/gatling-scala-example) sending HTTP GET requests through peer-1's Envoy HTTP proxy (port 15052) to peer-2's nginx.
-
-**Test environment:** relay on DigitalOcean 1 vCPU / 512 MB droplet; peers on Mac Mini M4 and MacBook Air M4 (Docker containers).
-
-| Load | Requests | OK | p50 | p95 | p99 | Notes |
-|------|----------|----|-----|-----|-----|-------|
-| 10 rps | 4,800 | **100%** | 204ms | 222ms | 249ms | |
-| 40 rps | 9,600 | **100%** | 203ms | 209ms | 228ms | |
-| 100 rps | 24,000 | **100%** | 202ms | 207ms | 216ms | |
-| 250 rps | 60,000 | **82%** | — | — | — | Relay CPU saturated; 18% 503/504 |
-
-The ~200ms floor is the inherent round-trip latency of the two-hop overlay. The single-threaded relay saturates between 100 and 250 rps on 1 vCPU.
-
 ---
 
 ## Security Details

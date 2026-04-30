@@ -173,28 +173,6 @@ Consumed by `scripts/docker-entrypoint.sh`:
 - Docker containers require `--cap-add=NET_ADMIN` and `--device=/dev/net/tun`
 - Requires libssl-dev (OpenSSL) for AES-256-GCM and X25519, and libyaml-dev for YAML config parsing
 
-## Performance Reference
-
-Test environment: relay on DigitalOcean 1 vCPU / 512 MB droplet; peers on Mac Mini M4 and MacBook Air M4 (Docker containers). Load generated with [gatling-scala-example](https://github.com/jecklgamis/gatling-scala-example) via Envoy HTTP proxy (port 15052) → peer-2 nginx.
-
-**Optimization history (10 rps baseline):**
-
-| Configuration | OK | p50 | p95 | p99 | Notes |
-|---|---|---|---|---|---|
-| TCP proxy, pre-fix | 51% | — | — | — | ~48% failure from rekey blackout |
-| TCP proxy + grace period | 100% | 404ms | 412ms | 431ms | p95 assertion (< 250ms) failed |
-| HTTP proxy (port 15050) | **100%** | **204ms** | **222ms** | **249ms** | All assertions passed |
-
-**Load scaling (HTTP proxy, Gatling):**
-
-| Load | Requests | OK | p50 | p95 | p99 | Max |
-|------|----------|----|-----|-----|-----|-----|
-| 10 rps | 4,800 | **100%** | 204ms | 222ms | 249ms | 653ms |
-| 40 rps | 9,600 | **100%** | 203ms | 209ms | 228ms | 849ms |
-| 100 rps | 24,000 | **100%** | 202ms | 207ms | 216ms | 660ms |
-| 250 rps | 60,000 | **82%** | — | — | — | Relay CPU saturated; 18% 503/504 |
-
-The ~200ms floor is the inherent round-trip latency of the two-hop overlay (peer→relay→peer). The single-threaded relay event loop on 1 vCPU saturates between 100 and 250 rps.
 
 ## Port Mapping (Docker)
 | Service | Container port | relay host port | peer-1 host port | peer-2 host port |
