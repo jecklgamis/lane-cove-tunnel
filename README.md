@@ -97,6 +97,8 @@ peers:
 | `endpoint` | No | `host:port` to connect to; omit for inbound-only peers (e.g. relay) |
 | `allowed_ips` | Yes | List of CIDR prefixes allowed from this peer (used for routing and source validation) |
 
+The relay uses `/32` per peer because it only accepts packets sourced from each peer's specific overlay IP. Peers use `/24` (the full subnet) because all overlay traffic — including traffic destined for other peers — is routed through the relay as the single gateway.
+
 ## Key Generation
 
 ```bash
