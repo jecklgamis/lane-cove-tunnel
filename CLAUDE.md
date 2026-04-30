@@ -5,8 +5,8 @@ A simple Linux hub-and-spoke layer 3 overlay network using a TUN virtual interfa
 
 ## Architecture
 
-- `peer.c` — symmetric peer binary. Binds a UDP socket, accepts inbound handshakes, and initiates outbound connections to peers with a configured endpoint (`-E`). Maintains a session table with per-peer AllowedIPs, sequence counters, and replay windows. Periodically checks whether outbound peers need rekeying (every 3 minutes).
-- `common.c/h` — TUN interface allocation, logging macros, AES-256-GCM encrypt/decrypt helpers, X25519 DH handshake functions with identity hiding, and a 2048-bit sliding-window replay-protection implementation.
+- `src/peer.c` — symmetric peer binary. Reads a YAML config file (`-c peer.yaml`), binds a UDP socket, accepts inbound handshakes, and initiates outbound connections to peers with a configured endpoint. Maintains a session table with per-peer AllowedIPs, sequence counters, and replay windows. Periodically checks whether outbound peers need rekeying (every 3 minutes).
+- `src/common.c/h` — TUN interface allocation, logging macros, AES-256-GCM encrypt/decrypt helpers, X25519 DH handshake functions with identity hiding, and a 2048-bit sliding-window replay-protection implementation.
 
 ### Topology
 ```
@@ -19,18 +19,38 @@ peer-2 (10.9.0.3) ──┘
 - **peer-1 / peer-2** — behind NAT, connect outbound to relay
 
 ### Key Provisioning
-Keys are X25519 key pairs stored in PEM files. Use `generate-peer-keys.sh` to generate key pairs.
+Keys are X25519 key pairs stored in PEM files. Use `scripts/generate-peer-keys.sh` to generate key pairs.
 
 ```
-./generate-peer-keys.sh relay peer-1 peer-2
+./scripts/generate-peer-keys.sh relay peer-1 peer-2
 # produces: relay.key/crt, peer-1.key/crt, peer-2.key/crt
 ```
 
-| Machine | Needs |
-|---------|-------|
-| relay | `relay.key`, `relay.crt`, `peer-1.crt`, `peer-2.crt` |
-| peer-1 | `peer-1.key`, `peer-1.crt`, `relay.crt` |
-| peer-2 | `peer-2.key`, `peer-2.crt`, `relay.crt` |
+Keys and YAML configs for local testing are kept in `config/`:
+
+| File | Purpose |
+|------|---------|
+| `config/relay.key` / `config/relay.crt` | Relay identity |
+| `config/peer-1.key` / `config/peer-1.crt` | Peer-1 identity |
+| `config/peer-2.key` / `config/peer-2.crt` | Peer-2 identity |
+| `config/relay.yaml` | Relay runtime config |
+| `config/peer-1.yaml` | Peer-1 runtime config |
+| `config/peer-2.yaml` | Peer-2 runtime config |
+
+### YAML Config Format
+```yaml
+interface: lanecove0
+port: 5040
+private_key_file: /app/peer-1.key   # absolute path inside container
+pre_shared_key: some-psk
+verbose: false
+
+peers:
+  - public_key: <hex>
+    endpoint: 1.2.3.4:5040          # omit for inbound-only peers
+    allowed_ips:
+      - 10.9.0.0/24
+```
 
 ### Session Management
 - Sessions are stored in a flat array (`sessions[]`, max 64)
@@ -78,7 +98,7 @@ Magic is `0xdeadbeefcafebabe`. Packets with a bad magic header, invalid GCM tag,
 On the TUN→UDP path, destination IP is looked up using longest-prefix match across all peer session route tables. On the UDP→TUN path, source IP is validated against the sending peer's AllowedIPs — packets with an unexpected source IP are dropped.
 
 ## Logging
-Custom `fprintf`-based logging defined in `common.h`. Global `log_level` variable (0=INFO, 1=DEBUG). Pass `-v` flag to enable debug output. All log lines include a timestamp:
+Custom `fprintf`-based logging defined in `common.h`. Global `log_level` variable (0=INFO, 1=DEBUG). Set `verbose: true` in config to enable debug output. All log lines include a timestamp:
 ```
 2026-04-23 14:05:32 [INFO]  Peer connected: 1.2.3.4:5040 (key=deadbeef...)
 2026-04-23 14:05:32 [WARN]  Replay detected from 1.2.3.4:5040 (seq=42) — dropping
@@ -88,92 +108,62 @@ Custom `fprintf`-based logging defined in `common.h`. Global `log_level` variabl
 ```
 make all          # compile peer binary
 make image        # build Docker image (lane-cove-tunnel-peer:latest)
-make clean        # remove binary
+make run-shell    # open a bash shell in a fresh container
+make clean        # remove compiled binary
 ```
 
 ## Running With Docker
 ```bash
 # Setup (once)
-./generate-peer-keys.sh relay peer-1 peer-2
 make image
 
 # Local testing (all on one Mac — 3 terminals)
-./run-relay-in-docker-dev.sh
-RELAY_IP=<mac-ip> ./run-peer-1-in-docker.sh
-RELAY_IP=<mac-ip> ./run-peer-2-in-docker.sh
+./scripts/run-relay-in-docker.sh
+./scripts/run-peer-1-in-docker.sh
+./scripts/run-peer-2-in-docker.sh
 ```
 
 ## Docker
-- `Dockerfile.peer` — multi-stage build (`debian:bookworm-slim`); generic image, keys mounted at runtime; includes iproute2, nginx, curl, ping, ifconfig, ssh, Envoy proxy (~299 MB total)
-- `docker-entrypoint-peer.sh` — reads `PEER_PUB_n`/`PEER_ENDPOINT_n`/`PEER_ALLOWED_IPS_n` env vars, creates TUN, starts nginx, optionally starts Envoy (when `ENVOY_UPSTREAM_HOST` is set), starts peer
-- `common.sh` — shared helpers: OpenSSL detection (Homebrew on macOS), `extract_pub`, `detect_local_ip` (macOS/Linux)
+- `Dockerfile.peer` — multi-stage build (`debian:bookworm-slim`); includes iproute2, nginx, curl, ping, ifconfig, ssh, Envoy proxy, libyaml (~299 MB total); bundles `config/` into the image
+- `scripts/docker-entrypoint.sh` — creates TUN, starts nginx, optionally starts Envoy (when `ENVOY_UPSTREAM_HOST` is set), execs `peer -c $PEER_CONFIG`
+- `scripts/common.sh` — shared helpers: OpenSSL detection (Homebrew on macOS), `extract_pub`, `detect_local_ip` (macOS/Linux)
 - `envoy.yaml.tmpl` — Envoy static config template; two listeners sharing one upstream cluster:
   - **TCP proxy** on `0.0.0.0:15040` — transparent L4 pass-through, one upstream connection per downstream connection
   - **HTTP proxy** on `0.0.0.0:15050` — L7 with upstream connection pooling (~130 requests/connection); eliminates per-request TCP handshake cost through the tunnel; recommended for HTTP workloads
   - Admin interface on `0.0.0.0:9901`
-- `create-peer-tunnel.sh <tunnel> <ip/cidr> [routes...]` — creates TUN interface, assigns overlay IP, disables ICMP redirects
-- `run-relay-in-docker.sh` — fully explicit CLI args; extracts pubkeys from `.crt` files, mounts keys as volumes; names container `lane-cove-tunnel-relay`, auto-removes on rerun
-- `run-relay-in-docker-dev.sh` — thin wrapper with defaults for local testing (relay.key/crt, peer-1/2 certs)
-- `run-peer-in-docker.sh` — fully explicit CLI args for running any peer in Docker; supports `--name` for container naming, auto-removes on rerun
-- `run-peer-1-in-docker.sh` / `run-peer-2-in-docker.sh` — thin wrappers; auto-detect relay IP, name containers `lane-cove-tunnel-peer-1` / `lane-cove-tunnel-peer-2`
-- `run-as-relay.sh` / `run-as-peer.sh` — native Linux wrappers; take `.crt` files and extract pubkeys internally
-- `test-tunnel.sh <container> <target_ip>` — ping + curl target through tunnel from a container
-- `exec-shell.sh <container>` — open a bash shell in a running container
+- `scripts/create-peer-tunnel.sh <tunnel> <ip/cidr> [routes...]` — creates TUN interface, assigns overlay IP, disables ICMP redirects
+- `scripts/run-relay-in-docker.sh` — runs relay container from `config/relay.yaml`; mounts key, exposes UDP 5040 and Envoy admin 9901
+- `scripts/run-peer-1-in-docker.sh` — runs peer-1 container from `config/peer-1.yaml`; mounts key, exposes ports for UDP tunnel, Envoy TCP/HTTP proxy, and admin
+- `scripts/run-peer-2-in-docker.sh` — same as peer-1 but for peer-2
+- `scripts/run-as-relay.sh` / `scripts/run-as-peer.sh` — native Linux wrappers
+- `scripts/exec-shell-to-peer-1-container.sh` / `scripts/exec-shell-to-peer-2-container.sh` — open a bash shell in a running peer container
+- `scripts/test-tunnel-relay.sh` — ping + curl both peers (10.9.0.2, 10.9.0.3) from relay
+- `scripts/test-tunnel-using-peer-1.sh [target_ip]` — ping + curl from peer-1 (default target: 10.9.0.3)
+- `scripts/test-tunnel-using-peer-2.sh [target_ip]` — ping + curl from peer-2 (default target: 10.9.0.2)
 
 ## CLI Options
 
 ### peer binary
 ```
-peer -i <iface> [-p <port>] [-K <keyfile>] -P <pubkey_hex> [-E <ip:port>] [-R <cidr>] [...] [-k <psk>] [-v] [-h]
+peer [-c <config.yaml>]
 ```
 | Option | Description |
 |--------|-------------|
-| `-i`   | TUN interface name (required) |
-| `-p`   | Listen port (default: 5040) |
-| `-K`   | Static private key PEM file (default: `peer.key`) |
-| `-P`   | Known peer public key hex (repeatable) |
-| `-E`   | Peer endpoint `ip:port` — initiates outbound; must follow `-P` |
-| `-R`   | AllowedIPs CIDR for the preceding `-P` (repeatable; must follow `-P`) |
-| `-k`   | Pre-shared key for handshake HMAC authentication |
-| `-v`   | Verbose / debug logging |
-| `-h`   | Show help |
-
-### run-as-relay.sh
-```
-run-as-relay.sh -i <tunnel> -k <keyfile> -p <crt:cidr> [-p ...] [-port <port>] [-v]
-```
-
-### run-as-peer.sh
-```
-run-as-peer.sh -i <tunnel> -k <keyfile> -p <crt:host:port:cidr> [-p ...] [-port <port>] [-v]
-```
-
-### run-relay-in-docker.sh
-```
-run-relay-in-docker.sh -i <tunnel> -k <keyfile> -c <crtfile> --peer-ip <ip/cidr> -p <crt:cidr> [-p ...] [--name <name>] [-port <port>] [-v]
-```
-
-### run-peer-in-docker.sh
-```
-run-peer-in-docker.sh -i <tunnel> -k <keyfile> -c <crtfile> --peer-ip <ip/cidr> --host-port <port> -p <crt:host:port:cidr> [-p ...] [--name <name>] [--envoy-upstream <host>] [--tcp-proxy-port <port>] [--http-proxy-port <port>] [--admin-port <port>] [-port <port>] [-v]
-```
+| `-c`   | YAML config file (default: `peer.yaml`) |
 
 ## Tunnel Interface
 - Interface name: `lanecove0`
 - Overlay network: `10.9.0.0/24` (relay=`10.9.0.1`, peer-1=`10.9.0.2`, peer-2=`10.9.0.3`)
 
 ## Docker Environment Variables
-Consumed by `docker-entrypoint-peer.sh`:
+Consumed by `scripts/docker-entrypoint.sh`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TUNNEL_NAME` | `lanecove0` | TUN interface name |
-| `PEER_PORT` | `5040` | Listen port |
 | `PEER_IP` | `10.9.0.1/24` | This peer's overlay IP/CIDR |
 | `PEER_ROUTES` | _(none)_ | Space-separated extra CIDRs to route via TUN |
-| `PEER_PUB_n` | — | Known peer public key hex |
-| `PEER_ENDPOINT_n` | — | Peer endpoint `ip:port` (triggers outbound connection) |
-| `PEER_ALLOWED_IPS_n` | — | AllowedIPs CIDR(s) for peer n |
+| `PEER_CONFIG` | `peer.yaml` | Path to YAML config file inside container |
 | `ENVOY_UPSTREAM_HOST` | — | Upstream host for Envoy proxy; if unset, Envoy is not started |
 | `ENVOY_UPSTREAM_PORT` | `80` | Upstream port for Envoy proxy |
 
@@ -181,7 +171,7 @@ Consumed by `docker-entrypoint-peer.sh`:
 - Requires Linux kernel (uses `linux/if_tun.h` and `/dev/net/tun`)
 - Does not compile on macOS — use Docker for building and running
 - Docker containers require `--cap-add=NET_ADMIN` and `--device=/dev/net/tun`
-- Requires libssl-dev (OpenSSL) for AES-256-GCM and X25519
+- Requires libssl-dev (OpenSSL) for AES-256-GCM and X25519, and libyaml-dev for YAML config parsing
 
 ## Performance Reference
 
@@ -207,10 +197,10 @@ Test environment: relay on DigitalOcean 1 vCPU / 512 MB droplet; peers on Mac Mi
 The ~200ms floor is the inherent round-trip latency of the two-hop overlay (peer→relay→peer). The single-threaded relay event loop on 1 vCPU saturates between 100 and 250 rps.
 
 ## Port Mapping (Docker)
-| Service | Container port | peer-1 host port | peer-2 host port |
-|---------|---------------|-----------------|-----------------|
-| UDP tunnel | 5040 | 5042 | 5043 |
-| nginx | 80 | — | — |
-| Envoy TCP proxy | 15040 | 15042 | 15043 |
-| Envoy HTTP proxy | 15050 | 15052 | 15053 |
-| Envoy admin | 9901 | 9901 | 9902 |
+| Service | Container port | relay host port | peer-1 host port | peer-2 host port |
+|---------|---------------|-----------------|-----------------|-----------------|
+| UDP tunnel | 5040 | 5040 | 5042 | 5043 |
+| nginx | 80 | — | — | — |
+| Envoy TCP proxy | 15040 | — | 15042 | 15043 |
+| Envoy HTTP proxy | 15050 | — | 15052 | 15053 |
+| Envoy admin | 9901 | 9901 | 9902 | 9903 |
