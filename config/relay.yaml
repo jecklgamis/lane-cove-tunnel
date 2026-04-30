@@ -1,6 +1,6 @@
 interface: lanecove0
 port: 5040
-private_key_file: /app/relay.key
+private_key_file: /lanecove/relay.key
 pre_shared_key: some-psk
 verbose: false
 

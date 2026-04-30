@@ -15,7 +15,7 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO]  $*"; }
 
 log "Creating TUN interface: $TUNNEL_NAME"
 ip tuntap del "$TUNNEL_NAME" mode tun 2>/dev/null || true
-ip tuntap add "$TUNNEL_NAME" mode tun
+ip tuntap add "$TUNNEL_NAME" mode tun user "${SUDO_USER:-$(whoami)}"
 log "Bringing up $TUNNEL_NAME"
 ip link set "$TUNNEL_NAME" up
 log "Assigning IP $PEER_IP to $TUNNEL_NAME"

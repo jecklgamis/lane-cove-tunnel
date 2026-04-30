@@ -14,7 +14,7 @@ docker run \
   --cap-add=NET_ADMIN \
   --device=/dev/net/tun \
   -v "${KEY_HOST}:${KEY_CONTAINER}:ro" \
-  -v "${CONFIG_ABS}:/app/peer.yaml:ro" \
+  -v "${CONFIG_ABS}:/lanecove/peer.yaml:ro" \
   -p 5043:5040/udp \
   -p 15043:15040 \
   -p 15053:15050 \

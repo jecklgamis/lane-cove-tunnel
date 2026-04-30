@@ -41,7 +41,7 @@ Keys and YAML configs for local testing are kept in `config/`:
 ```yaml
 interface: lanecove0
 port: 5040
-private_key_file: /app/peer-1.key   # absolute path inside container
+private_key_file: /lanecove/peer-1.key   # absolute path inside container
 pre_shared_key: some-psk
 verbose: false
 

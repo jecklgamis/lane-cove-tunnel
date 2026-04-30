@@ -106,17 +106,7 @@ int open_tunnel(char *tunnel) {
         return tun_fd;
     }
 
-    int ctl = socket(AF_INET, SOCK_DGRAM, 0);
-    if (ctl >= 0) {
-        struct ifreq ifr = {0};
-        strncpy(ifr.ifr_name, tunnel, IFNAMSIZ - 1);
-        ifr.ifr_mtu = TUN_MTU;
-        if (ioctl(ctl, SIOCSIFMTU, &ifr) < 0)
-            LOG_WARN("Failed to set MTU on %s: %s", tunnel, strerror(errno));
-        close(ctl);
-    }
-
-    LOG_INFO("Opened tunnel %s (MTU %d)", tunnel, TUN_MTU);
+    LOG_INFO("Opened tunnel %s", tunnel);
     return tun_fd;
 }
 

@@ -2,7 +2,7 @@ FROM debian:bookworm-slim AS builder
 
 RUN apt-get update && apt-get install -y gcc make libssl-dev libyaml-dev && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+WORKDIR /lanecove
 COPY src/common.c src/common.h src/peer.c ./
 RUN gcc -o peer peer.c common.c -lssl -lcrypto -lyaml
 
@@ -17,10 +17,10 @@ RUN apt-get update && apt-get install -y \
     && apt-get update && apt-get install -y envoy \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+WORKDIR /lanecove
 COPY config/nginx-keepalive.conf /etc/nginx/conf.d/keepalive.conf
 COPY scripts/docker-entrypoint.sh scripts/create-peer-tunnel.sh config/envoy.yaml.tmpl config/index.html.tmpl ./
-COPY --from=builder /app/peer ./
+COPY --from=builder /lanecove/peer ./
 COPY config/ ./config/
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
