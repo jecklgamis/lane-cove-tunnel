@@ -135,7 +135,7 @@ make image
 - `scripts/run-relay-in-docker.sh` — runs relay container from `config/relay.yaml`; mounts key, exposes UDP 5040 and Envoy admin 9901
 - `scripts/run-peer-1-in-docker.sh` — runs peer-1 container from `config/peer-1.yaml`; mounts key, exposes ports for UDP tunnel, Envoy TCP/HTTP proxy, and admin
 - `scripts/run-peer-2-in-docker.sh` — same as peer-1 but for peer-2
-- `scripts/run-as-relay.sh` / `scripts/run-as-peer.sh` — native Linux wrappers
+- `scripts/run-as-relay.sh` — native Linux wrapper to run as relay
 - `scripts/exec-shell-to-peer-1-container.sh` / `scripts/exec-shell-to-peer-2-container.sh` — open a bash shell in a running peer container
 - `scripts/test-tunnel-relay.sh` — ping + curl both peers (10.9.0.2, 10.9.0.3) from relay
 - `scripts/test-tunnel-using-peer-1.sh [target_ip]` — ping + curl from peer-1 (default target: 10.9.0.3)
