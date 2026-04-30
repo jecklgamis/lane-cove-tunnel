@@ -217,6 +217,8 @@ curl http://localhost:9902/stats  # Envoy admin
 
 ## Running Natively (Linux)
 
+Each peer (relay, peer-1, peer-2) must run on a **separate machine**. Running more than one on the same machine would conflict on the `lanecove0` TUN device name and the UDP port.
+
 The `peer` binary can run as a non-root user if the TUN interface is pre-created with the correct owner:
 
 ```bash
