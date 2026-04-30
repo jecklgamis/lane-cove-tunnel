@@ -58,7 +58,10 @@ jobs:
         run: sudo apt-get install -y libssl-dev libyaml-dev
 
       - name: Build deb
-        run: make deb DEB_ARCH=${{ matrix.arch }}
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          make deb DEB_ARCH=${{ matrix.arch }} DEB_VERSION=$VERSION
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -82,7 +85,13 @@ jobs:
         run: sudo apt-get install -y libssl-dev libyaml-dev rpm
 
       - name: Build rpm
-        run: make rpm
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          RPM_VER="${VERSION%%-*}"
+          RPM_REL="${VERSION#*-}"
+          if [ "$RPM_REL" = "$VERSION" ]; then RPM_REL="1"; fi
+          make rpm RPM_VERSION=$RPM_VER RPM_RELEASE=$RPM_REL
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2

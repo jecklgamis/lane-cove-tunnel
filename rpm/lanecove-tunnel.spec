@@ -1,6 +1,6 @@
 Name:           lanecove-tunnel
-Version:        1.0.0
-Release:        1%{?dist}
+Version:        %{pkg_version}
+Release:        %{pkg_release}%{?dist}
 Summary:        Hub-and-spoke layer 3 overlay network over UDP
 License:        MIT
 URL:            https://github.com/jecklgamis/lane-cove-tunnel

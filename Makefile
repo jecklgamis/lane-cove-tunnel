@@ -1,8 +1,10 @@
 DOCKER_IMAGE:=lane-cove-tunnel-peer:latest
-DEB_VERSION:=1.0.0
+DEB_VERSION?=1.0.0
 DEB_ARCH?=amd64
 DEB_PKG:=lanecove-tunnel_$(DEB_VERSION)_$(DEB_ARCH)
 DEB_ROOT:=build/$(DEB_PKG)
+RPM_VERSION?=1.0.0
+RPM_RELEASE?=1
 
 all:
 	gcc -o peer src/peer.c src/common.c -lssl -lcrypto -lyaml
@@ -18,6 +20,8 @@ rpm: all
 	rpmbuild -bb \
 		--define "_topdir $(CURDIR)/build/rpm" \
 		--define "_sourcedir $(CURDIR)" \
+		--define "pkg_version $(RPM_VERSION)" \
+		--define "pkg_release $(RPM_RELEASE)" \
 		rpm/lanecove-tunnel.spec
 	@echo "Package built: $$(find build/rpm/RPMS -name '*.rpm')"
 deb: all
@@ -35,7 +39,7 @@ deb: all
 	install -m 640 config/relay.yaml $(DEB_ROOT)/etc/lanecove/relay.yaml
 	install -m 640 config/peer-1.yaml $(DEB_ROOT)/etc/lanecove/peer-1.yaml
 	install -m 640 config/peer-2.yaml $(DEB_ROOT)/etc/lanecove/peer-2.yaml
-	sed "s/^Architecture:.*/Architecture: $(DEB_ARCH)/" debian/control > $(DEB_ROOT)/DEBIAN/control
+	sed -e "s/^Architecture:.*/Architecture: $(DEB_ARCH)/" -e "s/^Version:.*/Version: $(DEB_VERSION)/" debian/control > $(DEB_ROOT)/DEBIAN/control
 	install -m 755 debian/postinst $(DEB_ROOT)/DEBIAN/postinst
 	install -m 755 debian/prerm $(DEB_ROOT)/DEBIAN/prerm
 	dpkg-deb --build $(DEB_ROOT) build/$(DEB_PKG).deb
