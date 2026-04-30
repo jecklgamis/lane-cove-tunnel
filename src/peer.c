@@ -587,12 +587,15 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
                 if (nr <= 0) { LOG_ERROR("TUN read: %s", strerror(errno)); goto done; }
                 if (nr >= 20 && (buffer[0] >> 4) == 4) {
                     uint32_t dst_ip = ntohl(*(uint32_t *)(buffer + 16));
+                    struct in_addr da = { htonl(dst_ip) };
                     peer_session_t *s = route_lookup(dst_ip);
-                    if (s)
+                    if (s) {
+                        LOG_DEBUG("TUN->UDP: forwarding to %s:%d (dst=%s)",
+                                  inet_ntoa(s->addr.sin_addr), ntohs(s->addr.sin_port),
+                                  inet_ntoa(da));
                         forward_to_peer(sock_fd, s, enc_ctx, plain_buf, buffer, (int)nr, wire_buf);
-                    else {
-                        struct in_addr a = { htonl(dst_ip) };
-                        LOG_DEBUG("No route for %s — dropping", inet_ntoa(a));
+                    } else {
+                        LOG_DEBUG("No route for %s — dropping", inet_ntoa(da));
                     }
                 }
                 continue;
@@ -750,6 +753,21 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
                     continue;
                 }
             }
+            /* Relay shortcut: if dst belongs to another peer, forward directly
+             * without writing to TUN (avoids same-interface kernel routing). */
+            if (payload_len >= 20 && (payload[0] >> 4) == 4) {
+                uint32_t dst_ip = ntohl(*(uint32_t *)(payload + 16));
+                peer_session_t *fwd = route_lookup(dst_ip);
+                if (fwd && fwd != s) {
+                    struct in_addr da = { htonl(dst_ip) };
+                    LOG_DEBUG("Relay: %s:%d -> %s:%d (dst=%s)",
+                              inet_ntoa(s->addr.sin_addr), ntohs(s->addr.sin_port),
+                              inet_ntoa(fwd->addr.sin_addr), ntohs(fwd->addr.sin_port),
+                              inet_ntoa(da));
+                    forward_to_peer(sock_fd, fwd, enc_ctx, plain_buf, payload, payload_len, wire_buf);
+                    continue;
+                }
+            }
             ssize_t nw = write(tun_fd, payload, payload_len);
             if (nw < 0) { LOG_WARN("TUN write: %s", strerror(errno)); continue; }
         }
@@ -847,5 +865,7 @@ int main(int argc, char *argv[]) {
     EVP_PKEY_free(static_key);
     return 0;
 }
+
+
 
 

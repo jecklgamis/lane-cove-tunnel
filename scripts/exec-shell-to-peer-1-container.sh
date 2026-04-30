@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-exec "$(dirname "$0")/exec-shell.sh" lane-cove-tunnel-peer-1 "$@"
+docker exec -it lane-cove-tunnel-peer-1 /bin/bash
