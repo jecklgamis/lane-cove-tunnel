@@ -86,6 +86,12 @@ Sample configs for local testing are in `config/`.
 ```bash
 ./scripts/generate-peer-keys.sh relay peer-1 peer-2
 # produces: config/relay.key/.crt, config/peer-1.key/.crt, config/peer-2.key/.crt
+
+# Inspect key hex values (private + public) from a .key file
+./scripts/extract-keys-hex.sh config/peer-1.key
+
+# Extract just the public key hex from a .crt file
+./scripts/extract-pubkey-hex.sh config/peer-1.crt
 ```
 
 Distribute public keys (`.crt` files only — never share `.key` files):

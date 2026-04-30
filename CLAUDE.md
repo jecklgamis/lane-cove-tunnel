@@ -127,6 +127,8 @@ make image
 - `Dockerfile.peer` — multi-stage build (`debian:bookworm-slim`); includes iproute2, nginx, curl, ping, ifconfig, ssh, Envoy proxy, libyaml (~299 MB total); bundles `config/` into the image
 - `scripts/docker-entrypoint.sh` — creates TUN, starts nginx, optionally starts Envoy (when `ENVOY_UPSTREAM_HOST` is set), execs `peer -c $PEER_CONFIG`
 - `scripts/common.sh` — shared helpers: OpenSSL detection (Homebrew on macOS), `extract_pub`, `detect_local_ip` (macOS/Linux)
+- `scripts/extract-keys-hex.sh <file.key>` — prints private and public key hex from an X25519 `.key` PEM file
+- `scripts/extract-pubkey-hex.sh <file.crt>` — prints public key hex from an X25519 `.crt` PEM file
 - `envoy.yaml.tmpl` — Envoy static config template; two listeners sharing one upstream cluster:
   - **TCP proxy** on `0.0.0.0:15040` — transparent L4 pass-through, one upstream connection per downstream connection
   - **HTTP proxy** on `0.0.0.0:15050` — L7 with upstream connection pooling (~130 requests/connection); eliminates per-request TCP handshake cost through the tunnel; recommended for HTTP workloads
