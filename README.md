@@ -9,6 +9,16 @@ It creates a virtual IP network (`10.9.0.0/24`) layered on top of an existing un
 
 The topology is **hub-and-spoke**: peers behind NAT connect outbound to a relay with a public IP, and all traffic between peers transits through the relay. The relay forwards packets between peers in user space — no kernel IP forwarding required. Peers do not connect directly to each other (no NAT hole-punching).
 
+## Common Use Cases
+
+- **Connecting peers behind NAT** — machines that can't reach each other directly (home networks, cloud VMs, mobile) communicate securely through a relay with a public IP.
+- **Secure service access** — a peer runs a service (e.g. a web server or database) accessible only over the overlay IP, keeping it off the public internet.
+- **Multi-site connectivity** — linking servers across different cloud providers or regions through a single relay without needing cloud VPN products.
+- **Development and testing** — exposing a local dev machine's services to a remote peer (e.g. a CI runner or a colleague's machine) without port forwarding.
+- **Learning and experimentation** — the primary goal of this project: understanding how VPN protocols work (DH key exchange, AES-GCM, replay protection, rekeying).
+
+The single-threaded relay is suited for low-to-moderate traffic between a small number of peers, not high-throughput production workloads.
+
 ## Features
 
 ### Security
