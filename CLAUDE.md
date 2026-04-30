@@ -146,6 +146,10 @@ make image
 - `scripts/test-tunnel-using-peer-1.sh [target_ip]` — ping + curl from peer-1 (default target: 10.9.0.3)
 - `scripts/test-tunnel-using-peer-2.sh [target_ip]` — ping + curl from peer-2 (default target: 10.9.0.2)
 
+## Development Utilities
+
+- `sync-on-changes.sh` — watches `src/`, `config/`, `scripts/`, `Makefile`, and `Dockerfile.peer` on macOS using `fswatch` and rsyncs the project to a remote Linux machine on every change; edit the `REMOTE` variable to point to your Linux host
+
 ## CLI Options
 
 ### peer binary

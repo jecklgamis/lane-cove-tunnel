@@ -348,6 +348,18 @@ SHA-256(
 
 Magic is `0xdeadbeefcafebabe`. Packets with a bad magic header, invalid GCM tag, or replayed sequence number are silently dropped.
 
+## Development Utilities
+
+### sync-on-changes.sh
+
+Watches source files on macOS and rsyncs the project to a remote Linux machine on every change. Useful when developing on a Mac where the peer binary cannot be compiled or run natively.
+
+```bash
+./sync-on-changes.sh
+```
+
+Requires [fswatch](https://github.com/emcrisostomo/fswatch) (`brew install fswatch`) and SSH access to the remote machine. Edit the `REMOTE` variable at the top of the script to point to your Linux machine.
+
 ---
 
 ## References
