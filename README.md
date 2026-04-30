@@ -60,6 +60,25 @@ peers:
       - 10.9.0.0/24
 ```
 
+**Top-level keys:**
+
+| Key | Required | Description |
+|-----|----------|-------------|
+| `interface` | Yes | TUN interface name (e.g. `lanecove0`) |
+| `port` | Yes | UDP port to bind |
+| `private_key_file` | Yes | Path to this peer's X25519 private key PEM file |
+| `pre_shared_key` | No | Optional PSK for HMAC authentication of handshakes |
+| `verbose` | No | Set to `true` to enable debug logging (default: `false`) |
+| `peers` | No | List of peer entries (omit or leave empty for inbound-only) |
+
+**Per-peer keys (under `peers:`):**
+
+| Key | Required | Description |
+|-----|----------|-------------|
+| `public_key` | Yes | Peer's X25519 public key (hex-encoded) |
+| `endpoint` | No | `host:port` to connect to; omit for inbound-only peers (e.g. relay) |
+| `allowed_ips` | Yes | List of CIDR prefixes allowed from this peer (used for routing and source validation) |
+
 Sample configs for local testing are in `config/`.
 
 ## Key Generation
