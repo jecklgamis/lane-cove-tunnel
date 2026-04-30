@@ -1,0 +1,11 @@
+interface: lanecove0
+port: 5040
+private_key_file: /app/peer-1.key
+pre_shared_key: some-psk
+verbose: false
+
+peers:
+  - public_key: b2d96646e3461951bac8c557d96a56d502c05bc1b6fb5535635004a60a5db23f
+    endpoint: 192.168.86.186:5040
+    allowed_ips:
+      - 10.9.0.0/24

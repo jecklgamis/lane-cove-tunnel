@@ -1,6 +1,7 @@
 #include <netdb.h>
 #include <signal.h>
 #include <time.h>
+#include <yaml.h>
 #include "common.h"
 
 #define REKEY_AFTER_SECS          180
@@ -148,6 +149,155 @@ static int parse_cidr(const char *cidr, ip_prefix_t *out) {
     return 0;
 }
 
+static int load_config(const char *path,
+                       char *tunnel, int *port, char *keyfile,
+                       char *psk, int *has_psk) {
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        LOG_ERROR("Cannot open config file: %s: %s", path, strerror(errno));
+        return -1;
+    }
+
+    yaml_parser_t parser;
+    if (!yaml_parser_initialize(&parser)) {
+        fclose(f);
+        LOG_ERROR("yaml_parser_initialize failed");
+        return -1;
+    }
+    yaml_parser_set_input_file(&parser, f);
+
+    enum { S_ROOT, S_ROOT_VAL, S_PEERS_SEQ, S_PEER_MAP, S_PEER_VAL, S_ALLOWED_IPS_SEQ };
+    int  state    = S_ROOT;
+    char key[64]      = {0};
+    char peer_key[64] = {0};
+    int  ok           = 1;
+    yaml_event_t ev;
+
+    while (ok) {
+        if (!yaml_parser_parse(&parser, &ev)) {
+            LOG_ERROR("YAML parse error in %s (line %zu): %s",
+                      path, parser.problem_mark.line + 1, parser.problem);
+            ok = 0;
+            break;
+        }
+
+        switch (state) {
+
+        case S_ROOT:
+            if (ev.type == YAML_SCALAR_EVENT) {
+                strncpy(key, (char *)ev.data.scalar.value, sizeof(key) - 1);
+                state = S_ROOT_VAL;
+            }
+            break;
+
+        case S_ROOT_VAL:
+            if (ev.type == YAML_SCALAR_EVENT) {
+                const char *v = (char *)ev.data.scalar.value;
+                if      (strcmp(key, "interface")      == 0) strncpy(tunnel,  v, IF_NAMESIZE - 1);
+                else if (strcmp(key, "port")           == 0) *port = atoi(v);
+                else if (strcmp(key, "private_key_file") == 0) strncpy(keyfile, v, 255);
+                else if (strcmp(key, "verbose")        == 0 && strcmp(v, "true") == 0) log_level = 1;
+                else if (strcmp(key, "pre_shared_key") == 0) {
+                    strncpy(psk, v, 255);
+                    *has_psk = 1;
+                }
+                state = S_ROOT;
+            } else if (ev.type == YAML_SEQUENCE_START_EVENT && strcmp(key, "peers") == 0) {
+                state = S_PEERS_SEQ;
+            }
+            break;
+
+        case S_PEERS_SEQ:
+            if (ev.type == YAML_SEQUENCE_END_EVENT) {
+                state = S_ROOT;
+            } else if (ev.type == YAML_MAPPING_START_EVENT) {
+                if (peer_config_count >= MAX_PEERS) {
+                    LOG_ERROR("Config: too many peers (max %d)", MAX_PEERS);
+                    ok = 0; break;
+                }
+                memset(&peer_configs[peer_config_count], 0, sizeof(peer_config_t));
+                peer_config_count++;
+                state = S_PEER_MAP;
+            }
+            break;
+
+        case S_PEER_MAP:
+            if (ev.type == YAML_MAPPING_END_EVENT) {
+                state = S_PEERS_SEQ;
+            } else if (ev.type == YAML_SCALAR_EVENT) {
+                strncpy(peer_key, (char *)ev.data.scalar.value, sizeof(peer_key) - 1);
+                state = S_PEER_VAL;
+            }
+            break;
+
+        case S_PEER_VAL:
+            if (ev.type == YAML_SCALAR_EVENT) {
+                const char *v     = (char *)ev.data.scalar.value;
+                peer_config_t *pc = &peer_configs[peer_config_count - 1];
+                if (strcmp(peer_key, "public_key") == 0) {
+                    if (hex_to_bytes(v, pc->pub, DH_PUBKEY_LEN) < 0) {
+                        LOG_ERROR("Config: invalid public_key hex: %s", v);
+                        ok = 0; break;
+                    }
+                } else if (strcmp(peer_key, "endpoint") == 0) {
+                    char buf[256];
+                    strncpy(buf, v, sizeof(buf) - 1);
+                    char *colon = strrchr(buf, ':');
+                    if (!colon || colon == buf) {
+                        LOG_ERROR("Config: invalid endpoint (expected host:port): %s", v);
+                        ok = 0; break;
+                    }
+                    *colon = '\0';
+                    int eport = atoi(colon + 1);
+                    if (eport <= 0 || eport > 65535) {
+                        LOG_ERROR("Config: invalid port in endpoint: %s", v);
+                        ok = 0; break;
+                    }
+                    strncpy(pc->endpoint_host, buf, sizeof(pc->endpoint_host) - 1);
+                    pc->endpoint_port       = eport;
+                    pc->endpoint.sin_family = AF_INET;
+                    pc->endpoint.sin_port   = htons(eport);
+                    if (resolve_endpoint(pc) < 0) {
+                        LOG_ERROR("Config: cannot resolve endpoint host: %s", buf);
+                        ok = 0; break;
+                    }
+                    pc->has_endpoint = 1;
+                }
+                state = S_PEER_MAP;
+            } else if (ev.type == YAML_SEQUENCE_START_EVENT && strcmp(peer_key, "allowed_ips") == 0) {
+                state = S_ALLOWED_IPS_SEQ;
+            }
+            break;
+
+        case S_ALLOWED_IPS_SEQ:
+            if (ev.type == YAML_SEQUENCE_END_EVENT) {
+                state = S_PEER_MAP;
+            } else if (ev.type == YAML_SCALAR_EVENT) {
+                peer_config_t *pc = &peer_configs[peer_config_count - 1];
+                if (pc->route_count >= MAX_ROUTES_PER_PEER) {
+                    LOG_ERROR("Config: too many allowed_ips (max %d)", MAX_ROUTES_PER_PEER);
+                    ok = 0; break;
+                }
+                if (parse_cidr((char *)ev.data.scalar.value,
+                               &pc->routes[pc->route_count]) < 0) {
+                    LOG_ERROR("Config: invalid CIDR: %s", (char *)ev.data.scalar.value);
+                    ok = 0; break;
+                }
+                pc->route_count++;
+            }
+            break;
+        }
+
+        int done = (ev.type == YAML_STREAM_END_EVENT);
+        yaml_event_delete(&ev);
+        if (done) break;
+    }
+
+    yaml_parser_delete(&parser);
+    fclose(f);
+    return ok ? 0 : -1;
+}
+
 static peer_config_t *find_peer_config(const unsigned char *pub) {
     for (int i = 0; i < peer_config_count; i++)
         if (memcmp(peer_configs[i].pub, pub, DH_PUBKEY_LEN) == 0)
@@ -266,15 +416,10 @@ static void print_sessions(void) {
         peer_session_t *s = &sessions[i];
         char key_hex[17];
         bytes_to_hex(s->static_pub, 8, key_hex);
-        char ts[32] = "never";
-        if (s->last_seen) {
-            struct tm *tm_info = localtime(&s->last_seen);
-            strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", tm_info);
-        }
-        LOG_INFO("  [%s] %s:%d key=%s... routes=%d last_seen=%s",
+        LOG_INFO("  [%s] %s:%d key=%s... routes=%d",
                  s->is_outbound ? "out" : "in",
                  inet_ntoa(s->addr.sin_addr), ntohs(s->addr.sin_port),
-                 key_hex, s->route_count, ts);
+                 key_hex, s->route_count);
     }
 }
 
@@ -654,116 +799,25 @@ static void start_peer(char *tunnel, int port, const unsigned char *psk_key,
     close(tun_fd);
 }
 
-const char *program_name;
-
-static void usage(void) {
-    fprintf(stderr,
-            "Usage: %s -i <iface> [-p <port>] [-K <keyfile>] "
-            "-P <pubkey_hex> [-E <ip:port>] [-R <cidr>] [...] "
-            "[-k <psk>] [-v] [-h]\n", program_name);
-    fprintf(stderr, "Options:\n");
-    fprintf(stderr, "   -i  tunnel interface name (required)\n");
-    fprintf(stderr, "   -p  listen port (default: 5040)\n");
-    fprintf(stderr, "   -K  static private key PEM file (default: peer.key)\n");
-    fprintf(stderr, "   -P  peer public key hex (repeatable)\n");
-    fprintf(stderr, "   -E  peer endpoint ip:port — initiates outbound connection\n");
-    fprintf(stderr, "   -R  AllowedIPs CIDR for the preceding -P (repeatable)\n");
-    fprintf(stderr, "   -k  pre-shared key\n");
-    fprintf(stderr, "   -v  verbose\n");
-    fprintf(stderr, "   -h  help\n");
-    fprintf(stderr,
-            "Example: %s -i lanecove0 -K peer.key "
-            "-P <pubB> -E 1.2.3.4:5040 -R 10.9.0.2/32 "
-            "-P <pubC> -R 10.9.0.3/32\n", program_name);
-    exit(1);
-}
-
-int main(int argc, char *argv[]) {
-    program_name = argv[0];
-    int option;
+int main(int argc, char *argv[]) {  
+    const char *config_path = "peer.yaml";
+    int opt;
+    while ((opt = getopt(argc, argv, "c:")) > 0) {
+        if (opt == 'c') config_path = optarg;
+        else { fprintf(stderr, "Usage: %s [-c <config.yaml>]\n", argv[0]); exit(1); }
+    }
     int port = 5040;
     char tunnel[IF_NAMESIZE] = {0};
     char keyfile[256] = "peer.key";
     char psk[256] = {0};
     int has_psk = 0;
 
-    while ((option = getopt(argc, argv, "i:p:K:P:E:R:k:vh")) > 0) {
-        switch (option) {
-            case 'h': usage(); break;
-            case 'v': log_level = 1; break;
-            case 'i': strncpy(tunnel, optarg, IF_NAMESIZE - 1); break;
-            case 'p': port = atoi(optarg); break;
-            case 'K': strncpy(keyfile, optarg, sizeof(keyfile) - 1); break;
-            case 'P':
-                if (peer_config_count >= MAX_PEERS) {
-                    fprintf(stderr, "Too many -P entries (max %d)\n", MAX_PEERS);
-                    usage();
-                }
-                if (hex_to_bytes(optarg, peer_configs[peer_config_count].pub, DH_PUBKEY_LEN) < 0) {
-                    fprintf(stderr, "Invalid public key hex: %s\n", optarg);
-                    usage();
-                }
-                peer_configs[peer_config_count].route_count = 0;
-                peer_configs[peer_config_count].has_endpoint = 0;
-                peer_configs[peer_config_count].last_attempt = 0;
-                peer_config_count++;
-                break;
-            case 'E': {
-                if (peer_config_count == 0) { fprintf(stderr, "-E must follow -P\n"); usage(); }
-                peer_config_t *pc = &peer_configs[peer_config_count - 1];
-                char buf[256];
-                strncpy(buf, optarg, sizeof(buf) - 1);
-                buf[sizeof(buf) - 1] = '\0';
-                char *colon = strrchr(buf, ':');
-                if (!colon) {
-                    fprintf(stderr, "Invalid endpoint (expected host:port): %s\n", optarg);
-                    usage();
-                }
-                *colon = '\0';
-                int eport = atoi(colon + 1);
-                if (eport <= 0 || eport > 65535) {
-                    fprintf(stderr, "Invalid port in endpoint: %s\n", optarg);
-                    usage();
-                }
-                strncpy(pc->endpoint_host, buf, sizeof(pc->endpoint_host) - 1);
-                pc->endpoint_host[sizeof(pc->endpoint_host) - 1] = '\0';
-                pc->endpoint_port = eport;
-                memset(&pc->endpoint, 0, sizeof(pc->endpoint));
-                pc->endpoint.sin_family = AF_INET;
-                pc->endpoint.sin_port   = htons(eport);
-                if (resolve_endpoint(pc) < 0) {
-                    fprintf(stderr, "Cannot resolve endpoint host: %s\n", buf);
-                    exit(1);
-                }
-                pc->has_endpoint = 1;
-                break;
-            }
-            case 'R': {
-                if (peer_config_count == 0) { fprintf(stderr, "-R must follow -P\n"); usage(); }
-                peer_config_t *pc = &peer_configs[peer_config_count - 1];
-                if (pc->route_count >= MAX_ROUTES_PER_PEER) {
-                    fprintf(stderr, "Too many -R entries (max %d)\n", MAX_ROUTES_PER_PEER);
-                    usage();
-                }
-                if (parse_cidr(optarg, &pc->routes[pc->route_count]) < 0) {
-                    fprintf(stderr, "Invalid CIDR: %s\n", optarg);
-                    usage();
-                }
-                pc->route_count++;
-                break;
-            }
-            case 'k':
-                strncpy(psk, optarg, sizeof(psk) - 1);
-                has_psk = 1;
-                break;
-            default:
-                fprintf(stderr, "Unknown option: %c\n", option);
-                usage();
-        }
-    }
+    LOG_INFO("Loading config: %s", config_path);
+    if (load_config(config_path, tunnel, &port, keyfile, psk, &has_psk) < 0)
+        exit(EXIT_FAILURE);
 
-    if (*tunnel == '\0') { fprintf(stderr, "Missing -i\n"); usage(); }
-    if (peer_config_count == 0) { fprintf(stderr, "At least one -P entry is required\n"); usage(); }
+    if (*tunnel == '\0') { LOG_ERROR("Config: interface is required"); exit(EXIT_FAILURE); }
+    if (peer_config_count == 0) { LOG_ERROR("Config: at least one peer is required"); exit(EXIT_FAILURE); }
 
     EVP_PKEY *static_key = NULL;
     unsigned char static_pub[DH_PUBKEY_LEN];
@@ -793,3 +847,5 @@ int main(int argc, char *argv[]) {
     EVP_PKEY_free(static_key);
     return 0;
 }
+
+

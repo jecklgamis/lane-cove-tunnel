@@ -1,19 +1,25 @@
 #!/usr/bin/env bash
 set -e
-source "$(dirname "$0")/common.sh"
-RELAY_IP=${RELAY_IP:-$(detect_local_ip)}
-RELAY_IP=${RELAY_IP:?RELAY_IP could not be determined (set it explicitly)}
 
-exec ./run-peer-in-docker.sh \
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFIG_ABS="${SCRIPT_DIR}/config/peer-1.yaml"
+CONFIG_DIR="${SCRIPT_DIR}/config"
+
+KEY_CONTAINER=$(python3 -c "import yaml; cfg=yaml.safe_load(open('${CONFIG_ABS}')); print(cfg.get('private_key_file','peer.key'))")
+KEY_HOST="${CONFIG_DIR}/$(basename "$KEY_CONTAINER")"
+
+docker rm -f lane-cove-tunnel-peer-1 2>/dev/null || true
+docker run \
   --name lane-cove-tunnel-peer-1 \
-  -i lanecove0 \
-  -k peer-1.key \
-  -c peer-1.crt \
-  --peer-ip 10.9.0.2/24 \
-  --host-port 5042 \
-  --tcp-proxy-port 15042 \
-  --http-proxy-port 15052 \
-  --admin-port 9901 \
-  --envoy-upstream 10.9.0.3 \
-  -p relay.crt:"${RELAY_IP}":5040:10.9.0.0/24 \
-  "$@"
+  --cap-add=NET_ADMIN \
+  --device=/dev/net/tun \
+  -v "${KEY_HOST}:${KEY_CONTAINER}:ro" \
+  -v "${CONFIG_ABS}:/app/peer.yaml:ro" \
+  -p 5042:5040/udp \
+  -p 15042:15040 \
+  -p 15052:15050 \
+  -p 9902:9901 \
+  -e PEER_IP="10.9.0.2/24" \
+  -e ENVOY_UPSTREAM_HOST="10.9.0.3" \
+  -e ENVOY_UPSTREAM_PORT="80" \
+  lane-cove-tunnel-peer:latest

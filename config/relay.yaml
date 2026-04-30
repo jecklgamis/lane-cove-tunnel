@@ -1,0 +1,13 @@
+interface: lanecove0
+port: 5040
+private_key_file: /app/relay.key
+pre_shared_key: some-psk
+verbose: false
+
+peers:
+  - public_key: ba54232056ec3b8ff1982904345cea131293ca5daff441d11a23c010c0528442
+    allowed_ips:
+      - 10.9.0.2/32
+  - public_key: d6ce2b2246de6ab18b4d12c86889575958ac186e4894b92fdde597c2bcda2b7a
+    allowed_ips:
+      - 10.9.0.3/32
