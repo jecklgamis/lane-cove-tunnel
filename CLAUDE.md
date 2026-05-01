@@ -1,4 +1,4 @@
-# lane-cove-tunnel
+# lanecove-tunnel
 
 ## Project Overview
 A simple Linux hub-and-spoke layer 3 overlay network using a TUN virtual interface over UDP. Implements a basic VPN for learning purposes. Not for production use.
@@ -19,10 +19,10 @@ peer-2 (10.9.0.3) ──┘
 - **peer-1 / peer-2** — behind NAT, connect outbound to relay
 
 ### Key Provisioning
-Keys are X25519 key pairs stored in PEM files. Use `scripts/generate-peer-keys.sh` to generate key pairs.
+Keys are X25519 key pairs stored in PEM files. Use `scripts/lanecove-generate-peer-keys.sh` to generate key pairs.
 
 ```
-./scripts/generate-peer-keys.sh relay peer-1 peer-2
+./scripts/lanecove-generate-peer-keys.sh relay peer-1 peer-2
 # produces: relay.key/crt, peer-1.key/crt, peer-2.key/crt
 ```
 
@@ -34,6 +34,7 @@ Keys and YAML configs for local testing are kept in `config/`:
 | `config/peer-1.key` / `config/peer-1.crt` | Peer-1 identity |
 | `config/peer-2.key` / `config/peer-2.crt` | Peer-2 identity |
 | `config/relay.yaml` | Relay runtime config |
+| `config/peer.yaml` | Generic peer runtime config |
 | `config/peer-1.yaml` | Peer-1 runtime config |
 | `config/peer-2.yaml` | Peer-2 runtime config |
 
@@ -106,8 +107,8 @@ Custom `fprintf`-based logging defined in `common.h`. Global `log_level` variabl
 
 ## Build
 ```
-make all          # compile peer binary
-make image        # build Docker image (lane-cove-tunnel-peer:latest)
+make all          # compile lanecove binary
+make image        # build Docker image (lanecove-tunnel-peer:latest)
 make run-shell    # open a bash shell in a fresh container
 make deb          # build .deb package (output: build/lanecove-tunnel_1.0.0_amd64.deb)
 make rpm          # build .rpm package (output: build/rpm/RPMS/)
@@ -126,11 +127,12 @@ make image
 ```
 
 ## Docker
-- `Dockerfile.peer` — multi-stage build (`debian:bookworm-slim`); includes iproute2, nginx, curl, ping, ifconfig, ssh, Envoy proxy, libyaml (~299 MB total); bundles `config/` into the image
-- `scripts/docker-entrypoint.sh` — creates TUN, starts nginx, optionally starts Envoy (when `ENVOY_UPSTREAM_HOST` is set), execs `peer -c $PEER_CONFIG`
+- `Dockerfile` — multi-stage build (`debian:bookworm-slim`); includes iproute2, nginx, curl, ping, ifconfig, ssh, Envoy proxy, libyaml (~299 MB total); bundles `config/` into the image
+- `scripts/docker-entrypoint.sh` — creates TUN, starts nginx, optionally starts Envoy (when `ENVOY_UPSTREAM_HOST` is set), execs `lanecove -c $PEER_CONFIG`
 - `scripts/common.sh` — shared helpers: OpenSSL detection (Homebrew on macOS), `extract_pub`, `detect_local_ip` (macOS/Linux)
-- `scripts/extract-keys-hex.sh <file.key>` — prints private and public key hex from an X25519 `.key` PEM file
-- `scripts/extract-pubkey-hex.sh <file.crt>` — prints public key hex from an X25519 `.crt` PEM file
+- `scripts/lanecove-extract-keys-hex.sh <file.key>` — prints private and public key hex from an X25519 `.key` PEM file
+- `scripts/lanecove-extract-pubkey-hex.sh <file.crt>` — prints public key hex from an X25519 `.crt` PEM file
+- `scripts/lanecove-generate-peer-keys.sh <name> [name2 ...]` — generates X25519 key pairs (`.key` / `.crt`) for each given name
 - `envoy.yaml.tmpl` — Envoy static config template; two listeners sharing one upstream cluster:
   - **TCP proxy** on `0.0.0.0:15040` — transparent L4 pass-through, one upstream connection per downstream connection
   - **HTTP proxy** on `0.0.0.0:15050` — L7 with upstream connection pooling (~130 requests/connection); eliminates per-request TCP handshake cost through the tunnel; recommended for HTTP workloads
@@ -148,13 +150,13 @@ make image
 
 ## Development Utilities
 
-- `sync-on-changes.sh` — watches `src/`, `config/`, `scripts/`, `Makefile`, and `Dockerfile.peer` on macOS using `fswatch` and rsyncs the project to a remote Linux machine on every change; edit the `REMOTE` variable to point to your Linux host
+- `sync-on-changes.sh` — watches `src/`, `config/`, `scripts/`, `Makefile`, and `Dockerfile` on macOS using `fswatch` and rsyncs the project to a remote Linux machine on every change; edit the `REMOTE` variable to point to your Linux host
 
 ## CLI Options
 
-### peer binary
+### lanecove binary
 ```
-peer [-c <config.yaml>]
+lanecove [-c <config.yaml>]
 ```
 | Option | Description |
 |--------|-------------|

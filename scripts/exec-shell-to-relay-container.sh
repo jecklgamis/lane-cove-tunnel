@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-docker exec -it lane-cove-tunnel-relay /bin/bash
+docker exec -it lanecove-tunnel-relay /bin/bash

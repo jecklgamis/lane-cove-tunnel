@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y gcc make libssl-dev libyaml-dev && rm -
 
 WORKDIR /lanecove
 COPY src/common.c src/common.h src/peer.c ./
-RUN gcc -o peer peer.c common.c -lssl -lcrypto -lyaml
+RUN gcc -o lanecove peer.c common.c -lssl -lcrypto -lyaml
 
 FROM debian:bookworm-slim
 
@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /lanecove
 COPY config/nginx-keepalive.conf /etc/nginx/conf.d/keepalive.conf
 COPY scripts/docker-entrypoint.sh scripts/create-peer-tunnel.sh config/envoy.yaml.tmpl config/index.html.tmpl ./
-COPY --from=builder /lanecove/peer ./
+COPY --from=builder /lanecove/lanecove ./
 COPY config/ ./config/
 
 ENTRYPOINT ["./docker-entrypoint.sh"]

@@ -1,0 +1,11 @@
+interface: lanecove0
+port: 5040
+private_key_file: /etc/lanecove/peer.key
+pre_shared_key: some-psk
+verbose: false
+
+peers:
+  - public_key: <relay-public-key-hex>
+    endpoint: <relay-host>:5040
+    allowed_ips:
+      - 10.9.0.0/24

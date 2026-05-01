@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: ./generate-peer-keys.sh <name> [name2 ...]
+# Usage: ./lanecove-generate-peer-keys.sh <name> [name2 ...]
 # Generates <name>.key (private) and <name>.crt (public) for each name.
 
 OPENSSL=openssl

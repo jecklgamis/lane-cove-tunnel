@@ -8,9 +8,9 @@ CONFIG_DIR="${SCRIPT_DIR}/../config"
 KEY_CONTAINER=$(python3 -c "import yaml; cfg=yaml.safe_load(open('${CONFIG_ABS}')); print(cfg.get('private_key_file','peer.key'))")
 KEY_HOST="${CONFIG_DIR}/$(basename "$KEY_CONTAINER")"
 
-docker rm -f lane-cove-tunnel-relay 2>/dev/null || true
+docker rm -f lanecove-tunnel-relay 2>/dev/null || true
 docker run \
-  --name lane-cove-tunnel-relay \
+  --name lanecove-tunnel-relay \
   --cap-add=NET_ADMIN \
   --device=/dev/net/tun \
   -v "${KEY_HOST}:${KEY_CONTAINER}:ro" \
@@ -20,4 +20,4 @@ docker run \
   -e PEER_IP="10.9.0.1/24" \
   -e ENVOY_UPSTREAM_HOST="127.0.0.1" \
   -e ENVOY_UPSTREAM_PORT="9901" \
-  lane-cove-tunnel-peer:latest
+  lanecove-tunnel-peer:latest

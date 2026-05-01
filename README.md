@@ -1,4 +1,6 @@
-## lane-cove-tunnel
+## lanecove-tunnel
+
+[![build](https://github.com/jecklgamis/lanecove-tunnel/actions/workflows/build.yaml/badge.svg)](https://github.com/jecklgamis/lanecove-tunnel/actions/workflows/build.yaml)
 
 A simple Linux **hub-and-spoke layer 3 overlay network** using a TUN virtual interface over UDP. Implements a basic VPN for learning purposes.
 Warning: not for production use.
@@ -65,16 +67,16 @@ sudo apt install gcc make iproute2 libssl-dev libyaml-dev
 
 ## Building
 ```
-make all        # build peer binary
-make image      # build Docker image (lane-cove-tunnel-peer:latest)
+make all        # build lanecove binary
+make image      # build Docker image (lanecove-tunnel-peer:latest)
 make deb        # build .deb package (output: build/lanecove-tunnel_1.0.0_amd64.deb)
 make rpm        # build .rpm package (output: build/rpm/RPMS/)
-make clean      # remove peer binary and build artifacts
+make clean      # remove lanecove binary and build artifacts
 ```
 
 ## Configuration
 
-The `peer` binary is configured via a YAML file. Sample configs are in `config/`.
+The `lanecove` binary is configured via a YAML file. Sample configs are in `config/`.
 
 **Relay** (`config/relay.yaml`) — inbound-only, no `endpoint`:
 ```yaml
@@ -147,14 +149,14 @@ The relay uses `/32` per peer because it only accepts packets sourced from each 
 ## Key Generation
 
 ```bash
-./scripts/generate-peer-keys.sh relay peer-1 peer-2
+./scripts/lanecove-generate-peer-keys.sh relay peer-1 peer-2
 # produces: config/relay.key/.crt, config/peer-1.key/.crt, config/peer-2.key/.crt
 
 # Inspect key hex values (private + public) from a .key file
-./scripts/extract-keys-hex.sh config/peer-1.key
+./scripts/lanecove-extract-keys-hex.sh config/peer-1.key
 
 # Extract just the public key hex from a .crt file
-./scripts/extract-pubkey-hex.sh config/peer-1.crt
+./scripts/lanecove-extract-pubkey-hex.sh config/peer-1.crt
 ```
 
 Distribute public keys (`.crt` files only — never share `.key` files):
@@ -295,11 +297,11 @@ sudo rpm -e lanecove-tunnel
 
 Each peer (relay, peer-1, peer-2) must run on a **separate machine**. Running more than one on the same machine would conflict on the `lanecove0` TUN device name and the UDP port.
 
-The `peer` binary can run as a non-root user if the TUN interface is pre-created with the correct owner:
+The `lanecove` binary can run as a non-root user if the TUN interface is pre-created with the correct owner:
 
 ```bash
 # Generate keys (once)
-./scripts/generate-peer-keys.sh relay peer-1 peer-2
+./scripts/lanecove-generate-peer-keys.sh relay peer-1 peer-2
 
 # Update the `endpoint` in config/peer-1.yaml and config/peer-2.yaml
 # to point to your relay's host or IP address before starting peers.
@@ -401,7 +403,7 @@ Magic is `0xdeadbeefcafebabe`. Packets with a bad magic header, invalid GCM tag,
 
 ### sync-on-changes.sh
 
-Watches source files on macOS and rsyncs the project to a remote Linux machine on every change. Useful when developing on a Mac where the peer binary cannot be compiled or run natively.
+Watches source files on macOS and rsyncs the project to a remote Linux machine on every change. Useful when developing on a Mac where the lanecove binary cannot be compiled or run natively.
 
 ```bash
 ./sync-on-changes.sh

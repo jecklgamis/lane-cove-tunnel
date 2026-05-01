@@ -21,4 +21,4 @@ if [[ -n "${ENVOY_UPSTREAM_HOST:-}" ]]; then
     echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO]  Starting Envoy: TCP listener 0.0.0.0:15040 -> ${ENVOY_UPSTREAM_HOST}:${ENVOY_UPSTREAM_PORT}"
     envoy -c envoy.yaml --log-level error --log-path envoy.log &
 fi
-exec ./peer -c "${PEER_CONFIG}"
+exec ./lanecove -c "${PEER_CONFIG}"

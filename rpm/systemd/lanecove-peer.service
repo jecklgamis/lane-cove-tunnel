@@ -1,0 +1,14 @@
+[Unit]
+Description=Lane Cove Tunnel - Peer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStartPre=/usr/share/lanecove-tunnel/create-peer-tunnel.sh lanecove0 10.9.0.2/24
+ExecStart=/usr/bin/lanecove-peer -c /etc/lanecove/peer.yaml
+Restart=on-failure
+RestartSec=5
+AmbientCapabilities=CAP_NET_ADMIN
+
+[Install]
+WantedBy=multi-user.target

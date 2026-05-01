@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Watch source and script files and rsync the whole directory to the remote on changes.
 
-REMOTE="jeck@nagasaki.local:~/workspace/lane-cove-tunnel"
+REMOTE="jeck@nagasaki.local:~/workspace/lanecove-tunnel"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 RSYNC_OPTS=(
@@ -9,7 +9,7 @@ RSYNC_OPTS=(
     --delete
     --exclude='.git/'
     --exclude='.idea/'
-    --exclude='peer'
+    --exclude='lanecove'
 )
 
 do_sync() {
@@ -22,13 +22,13 @@ do_sync() {
 echo "Syncing to ${REMOTE}"
 do_sync
 
-echo "Watching for changes in src/, config/, scripts/, Makefile, Dockerfile.peer..."
+echo "Watching for changes in src/, config/, scripts/, Makefile, Dockerfile..."
 fswatch -ro \
     "$DIR/src" \
     "$DIR/config" \
     "$DIR/scripts" \
     "$DIR/Makefile" \
-    "$DIR/Dockerfile.peer" \
+    "$DIR/Dockerfile" \
 | while read -r; do
     do_sync
 done
