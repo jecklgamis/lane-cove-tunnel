@@ -2,6 +2,8 @@
 
 [![build](https://github.com/jecklgamis/lanecove-tunnel/actions/workflows/build.yaml/badge.svg)](https://github.com/jecklgamis/lanecove-tunnel/actions/workflows/build.yaml)
 
+📖 [User Guide](https://jecklgamis.github.io/lanecove-tunnel/)
+
 A simple Linux **hub-and-spoke layer 3 overlay network** using a TUN virtual interface over UDP. Implements a basic VPN for learning purposes.
 Warning: not for production use.
 
