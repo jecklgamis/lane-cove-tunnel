@@ -415,6 +415,21 @@ Requires [fswatch](https://github.com/emcrisostomo/fswatch) (`brew install fswat
 
 ---
 
+## Security Review
+
+A security review was conducted against the codebase covering memory safety, injection vulnerabilities, and cryptographic correctness. No high-confidence exploitable vulnerabilities were found.
+
+| Finding | File | Verdict |
+|---------|------|---------|
+| `strcpy()` after TUNSETIFF ioctl | `src/common.c` | False positive — `ifr_name` is kernel-provided and always null-terminated; Linux enforces a hard 15-char limit on interface names |
+| Unquoted `${PEER_ROUTES}` expansion | `scripts/docker-entrypoint.sh` | False positive — intentional word-splitting of a trusted operator-set Docker env var; no untrusted input path |
+| `TUNNEL_NAME` in sysctl command | `scripts/create-peer-tunnel.sh` | False positive — always hardcoded or set by the container operator who already has root |
+| Unbounded `sprintf()` in `bytes_to_hex()` | `src/common.c` | False positive — `len` is always a compile-time constant; no attacker-controlled input reaches this function |
+
+The cryptographic protocol (X25519, AES-256-GCM, replay protection) was reviewed and no bypass paths were identified.
+
+---
+
 ## References
 * https://www.kernel.org/doc/Documentation/networking/tuntap.txt
 * https://www.wireguard.com/papers/wireguard.pdf
