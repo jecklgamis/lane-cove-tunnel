@@ -320,6 +320,55 @@ The `peer` binary can run as a non-root user if the TUN interface is pre-created
 
 ## Security Details
 
+### Handshake Flow
+
+```
+INITIATOR (peer-1)                             RESPONDER (relay)
+──────────────────                             ─────────────────
+
+Generate eph_c keypair
+Encrypt static_pub_c with
+  SHA-256(DH(eph_c, static_pub_s))
+Compute HMAC-SHA256(psk, ...)
+
+  ──── HANDSHAKE INIT ────────────────────────────>
+       [8 magic]
+       [32 eph_pub_c]
+       [48 AES-GCM(static_pub_c)]
+       [32 HMAC(psk)]  (if PSK)
+
+                                                Verify HMAC (if PSK)
+                                                Decrypt static_pub_c
+                                                  using DH(eph_c, static_s)
+                                                Look up peer config by static_pub_c
+                                                Generate eph_s keypair (pre-generated)
+                                                Encrypt static_pub_s with
+                                                  SHA-256(DH(eph_s, eph_c))
+                                                Derive session key (see below)
+                                                Save old key as prev_key (90s grace)
+                                                Reset replay window
+                                                Pre-generate next eph keypair
+
+  <─── HANDSHAKE RESPONSE ────────────────────────
+       [8 magic]
+       [32 eph_pub_s]
+       [48 AES-GCM(static_pub_s)]
+       [32 HMAC(psk)]  (if PSK)
+
+Verify HMAC (if PSK)
+Decrypt static_pub_s
+  using DH(eph_s, eph_c)
+Verify static_pub_s matches config
+Derive same session key
+Save old key as prev_key (90s grace)
+Reset replay window, send_seq=0
+
+  ──── DATA (AES-256-GCM, seq=1) ─────────────────>
+  <─── DATA (AES-256-GCM, seq=1) ─────────────────
+```
+
+Both sides retain the old session key for 90 seconds (`prev_key` grace period) to decrypt in-flight packets during the switchover. Prev-key packets bypass the replay window to prevent old sequence numbers from poisoning the new session.
+
 ### Handshake Wire Format
 
 ```
