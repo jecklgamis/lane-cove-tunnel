@@ -795,6 +795,9 @@ static void start_peer(char *tunnel, int port, const unsigned char *psk_key,
     }
     int opt = 1;
     setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    int bufsize = 4 * 1024 * 1024;
+    setsockopt(sock_fd, SOL_SOCKET, SO_RCVBUF, &bufsize, sizeof(bufsize));
+    setsockopt(sock_fd, SOL_SOCKET, SO_SNDBUF, &bufsize, sizeof(bufsize));
 
     struct sockaddr_in bind_addr = {0};
     bind_addr.sin_family = AF_INET;
