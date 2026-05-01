@@ -1,0 +1,27 @@
+---
+---
+
+@import "{{ site.theme }}";
+
+.page-header {
+  padding: 1.5rem 1rem;
+}
+
+.main-content {
+  max-width: 100%;
+  padding: 1rem 2rem;
+  margin: 0;
+}
+
+@media (min-width: 64em) {
+  .main-content {
+    max-width: 100%;
+    padding: 1.5rem 3rem;
+  }
+}
+
+@media (min-width: 42em) {
+  .main-content {
+    padding: 1rem 2rem;
+  }
+}
