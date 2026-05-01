@@ -714,12 +714,15 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
             s->last_seen = now;
             int plain_len;
             int dec_ok = 0;
+            int used_prev_key = 0;
             if (decrypt_packet(dec_ctx, s->session_key, wire_buf, (int)nr, plain_buf, &plain_len) == 0) {
                 dec_ok = 1;
                 s->prev_key_active = 0;
             } else if (s->prev_key_active && now <= s->prev_key_expires) {
-                if (decrypt_packet(dec_ctx, s->prev_session_key, wire_buf, (int)nr, plain_buf, &plain_len) == 0)
+                if (decrypt_packet(dec_ctx, s->prev_session_key, wire_buf, (int)nr, plain_buf, &plain_len) == 0) {
                     dec_ok = 1;
+                    used_prev_key = 1;
+                }
             }
             if (!dec_ok) {
                 LOG_WARN("Decrypt failed from %s:%d — dropping",
@@ -735,7 +738,10 @@ static void event_loop(int tun_fd, int sock_fd, EVP_PKEY *static_key,
             uint64_t seq_be;
             memcpy(&seq_be, plain_buf + HEADER_SIZE, SEQ_SIZE);
             uint64_t seq = be64toh(seq_be);
-            if (check_replay(seq, &s->recv_seq_highest, s->recv_seq_window) < 0) {
+            /* Skip replay check for prev-key packets: their old sequence numbers
+             * would advance recv_seq_highest and cause the new session's seq=1,2,...
+             * to be rejected as replays once the initiator switches to the new key. */
+            if (!used_prev_key && check_replay(seq, &s->recv_seq_highest, s->recv_seq_window) < 0) {
                 LOG_WARN("Replay from %s:%d (seq=%lu) — dropping",
                          inet_ntoa(s->addr.sin_addr), ntohs(s->addr.sin_port), (unsigned long)seq);
                 continue;
