@@ -9,7 +9,7 @@ if [[ ! -f "$PEER_CONFIG" ]]; then
     exit 1
 fi
 
-./create-peer-tunnel.sh "${TUNNEL_NAME}" "${PEER_IP}" ${PEER_ROUTES}
+./lanecove-create-tunnel.sh "${TUNNEL_NAME}" "${PEER_IP}" ${PEER_ROUTES}
 HOST_IP=${PEER_IP%%/*}
 export HOST_IP
 envsubst < index.html.tmpl > /var/www/html/index.html

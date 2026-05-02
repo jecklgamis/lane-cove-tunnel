@@ -1,6 +1,6 @@
 interface: lanecove0
 port: 5040
-private_key_file: /lanecove/peer-1.key
+private_key_file: /etc/lanecove/peer-1.key
 pre_shared_key: some-psk
 verbose: false
 

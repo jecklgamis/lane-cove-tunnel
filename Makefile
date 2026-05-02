@@ -32,10 +32,11 @@ deb: all
 	mkdir -p $(DEB_ROOT)/lib/systemd/system
 	mkdir -p $(DEB_ROOT)/etc/lanecove
 	install -m 755 lanecove $(DEB_ROOT)/usr/bin/lanecove-peer
-	install -m 755 scripts/create-peer-tunnel.sh $(DEB_ROOT)/usr/share/lanecove-tunnel/
+	install -m 755 scripts/lanecove-create-tunnel.sh $(DEB_ROOT)/usr/share/lanecove-tunnel/
 	install -m 755 scripts/lanecove-extract-keys-hex.sh $(DEB_ROOT)/usr/bin/
 	install -m 755 scripts/lanecove-extract-pubkey-hex.sh $(DEB_ROOT)/usr/bin/
 	install -m 755 scripts/lanecove-generate-peer-keys.sh $(DEB_ROOT)/usr/bin/
+	install -m 755 scripts/lanecove-create-tunnel.sh $(DEB_ROOT)/usr/bin/
 	install -m 644 debian/systemd/lanecove-relay.service $(DEB_ROOT)/lib/systemd/system/
 	install -m 644 debian/systemd/lanecove-peer.service $(DEB_ROOT)/lib/systemd/system/
 	install -m 644 debian/systemd/lanecove-peer-1.service $(DEB_ROOT)/lib/systemd/system/

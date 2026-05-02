@@ -50,7 +50,7 @@ Both packages install:
 | `/usr/bin/lanecove-generate-peer-keys.sh` | Key pair generator |
 | `/usr/bin/lanecove-extract-keys-hex.sh` | Extract private + public key hex |
 | `/usr/bin/lanecove-extract-pubkey-hex.sh` | Extract public key hex from `.crt` |
-| `/usr/share/lanecove-tunnel/create-peer-tunnel.sh` | TUN interface setup helper |
+| `/usr/share/lanecove-tunnel/lanecove-create-tunnel.sh` | TUN interface setup helper |
 | `/etc/lanecove/relay.yaml` | Relay config template |
 | `/etc/lanecove/peer.yaml` | Generic peer config template |
 | `/etc/lanecove/peer-1.yaml` | Peer-1 config template |

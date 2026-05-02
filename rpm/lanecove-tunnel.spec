@@ -19,7 +19,7 @@ mkdir -p %{buildroot}/usr/lib/systemd/system
 mkdir -p %{buildroot}/etc/lanecove
 
 install -m 755 %{_sourcedir}/lanecove                      %{buildroot}/usr/bin/lanecove-peer
-install -m 755 %{_sourcedir}/scripts/create-peer-tunnel.sh        %{buildroot}/usr/share/lanecove-tunnel/
+install -m 755 %{_sourcedir}/scripts/lanecove-create-tunnel.sh        %{buildroot}/usr/share/lanecove-tunnel/
 install -m 755 %{_sourcedir}/scripts/lanecove-extract-keys-hex.sh    %{buildroot}/usr/bin/
 install -m 755 %{_sourcedir}/scripts/lanecove-extract-pubkey-hex.sh  %{buildroot}/usr/bin/
 install -m 755 %{_sourcedir}/scripts/lanecove-generate-peer-keys.sh  %{buildroot}/usr/bin/
@@ -34,7 +34,7 @@ install -m 640 %{_sourcedir}/config/peer-2.yaml  %{buildroot}/etc/lanecove/peer-
 
 %files
 /usr/bin/lanecove-peer
-/usr/share/lanecove-tunnel/create-peer-tunnel.sh
+/usr/share/lanecove-tunnel/lanecove-create-tunnel.sh
 /usr/bin/lanecove-extract-keys-hex.sh
 /usr/bin/lanecove-extract-pubkey-hex.sh
 /usr/bin/lanecove-generate-peer-keys.sh

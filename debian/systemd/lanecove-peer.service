@@ -4,7 +4,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStartPre=/usr/share/lanecove-tunnel/create-peer-tunnel.sh lanecove0 10.9.0.2/24
+#ExecStartPre=/usr/share/lanecove-tunnel/lanecove-create-tunnel.sh lanecove0 10.9.0.2/24
 ExecStart=/usr/bin/lanecove-peer -c /etc/lanecove/peer.yaml
 Restart=on-failure
 RestartSec=5

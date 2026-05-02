@@ -318,7 +318,7 @@ The `lanecove` binary can run as a non-root user if the TUN interface is pre-cre
 ./scripts/run-peer-2.sh
 ```
 
-`create-peer-tunnel.sh` creates the TUN interface owned by the calling user (`$SUDO_USER`), so `peer` can open it without `CAP_NET_ADMIN`.
+`lanecove-create-tunnel.sh` creates the TUN interface owned by the calling user (`$SUDO_USER`), so `peer` can open it without `CAP_NET_ADMIN`.
 
 ---
 
@@ -465,7 +465,7 @@ A security review was conducted against the codebase covering memory safety, inj
 |---------|------|---------|
 | `strcpy()` after TUNSETIFF ioctl | `src/common.c` | False positive — `ifr_name` is kernel-provided and always null-terminated; Linux enforces a hard 15-char limit on interface names |
 | Unquoted `${PEER_ROUTES}` expansion | `scripts/docker-entrypoint.sh` | False positive — intentional word-splitting of a trusted operator-set Docker env var; no untrusted input path |
-| `TUNNEL_NAME` in sysctl command | `scripts/create-peer-tunnel.sh` | False positive — always hardcoded or set by the container operator who already has root |
+| `TUNNEL_NAME` in sysctl command | `scripts/lanecove-create-tunnel.sh` | False positive — always hardcoded or set by the container operator who already has root |
 | Unbounded `sprintf()` in `bytes_to_hex()` | `src/common.c` | False positive — `len` is always a compile-time constant; no attacker-controlled input reaches this function |
 
 The cryptographic protocol (X25519, AES-256-GCM, replay protection) was reviewed and no bypass paths were identified.
